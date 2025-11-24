@@ -6,6 +6,7 @@ import TestimonialsSection from "@/components/TestimonialsSection";
 import AboutSection from "@/components/AboutSection";
 import FAQSection from "@/components/FAQSection";
 import CTASection from "@/components/CTASection";
+import Footer from "@/components/Footer";
 
 const Index = () => {
   return (
@@ -18,6 +19,7 @@ const Index = () => {
       <AboutSection />
       <FAQSection />
       <CTASection />
+      <Footer />
     </main>
   );
 };

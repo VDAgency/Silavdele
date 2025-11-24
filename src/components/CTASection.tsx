@@ -81,16 +81,16 @@ const CTASection = () => {
           <div className="mt-12 text-center text-sm text-muted-foreground space-y-2">
             <p>Остались вопросы? Свяжитесь с нами:</p>
             <div className="flex flex-wrap justify-center gap-4">
-              <a href="mailto:support@telegram-course.ru" className="text-primary hover:underline">
-                support@telegram-course.ru
+              <a href="mailto:silavdele@mail.ru" className="text-primary hover:underline">
+                silavdele@mail.ru
               </a>
               <span>•</span>
-              <a href="https://t.me/support" className="text-primary hover:underline">
+              <a href="https://t.me/Sergei_Silantev" className="text-primary hover:underline">
                 @support в Telegram
               </a>
               <span>•</span>
-              <a href="tel:+79991234567" className="text-primary hover:underline">
-                +7 (999) 123-45-67
+              <a href="tel:+79140769556" className="text-primary hover:underline">
+                +7 (914) 076-95-56
               </a>
             </div>
           </div>

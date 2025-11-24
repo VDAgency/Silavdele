@@ -11,7 +11,7 @@ const HeroSection = () => {
       <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2UwZTBlMCIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-40"></div>
       
       <div className="container mx-auto px-4 py-20 relative z-10">
-        <div className="max-w-5xl mx-auto text-center space-y-8 animate-fade-in">
+        <div className="max-w-5xl mx-auto text-left space-y-8 animate-fade-in">
           <div className="inline-block mb-4">
             <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary font-medium text-sm">
               <span className="relative flex h-2 w-2">
@@ -22,12 +22,12 @@ const HeroSection = () => {
             </span>
           </div>
           
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight leading-tight">
-            Освой Telegram от А до Я{" "}
+          <h1 className="text-5xl md:text-7xl lg:text-7xl font-bold tracking-tight leading-tight">
+            Превратите Telegram в мощный{" "}
             <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              и заработай
-            </span>{" "}
-            на своём контенте
+              инструмент
+            </span><br />
+            роста вашего бизнеса
           </h1>
           
           <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
