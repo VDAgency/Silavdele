@@ -27,27 +27,45 @@ app.post('/api/payment/create', async (req, res) => {
         const order = await createOrder(user.id, amount, tariff);
 
         // 2. Готовим запрос в ЮКассу
-        const idempotenceKey = uuidv4(); // Уникальный ключ запроса
+        const idempotenceKey = uuidv4();
         const shopId = process.env.YOOKASSA_SHOP_ID;
         const secretKey = process.env.YOOKASSA_SECRET_KEY;
-        
-        // Кодируем ключи для авторизации (Basic Auth)
         const auth = Buffer.from(`${shopId}:${secretKey}`).toString('base64');
 
-        // 3. Отправляем запрос в ЮКассу
+        // 3. Отправляем запрос в ЮКассу (С ЧЕКОМ!)
         const response = await axios.post('https://api.yookassa.ru/v3/payments', {
             amount: {
                 value: amount,
                 currency: 'RUB'
             },
-            capture: true, // Сразу списываем деньги
+            capture: true,
             confirmation: {
                 type: 'redirect',
-                return_url: 'https://silavdele.ru/payment/success' // Куда вернуть юзера
+                return_url: 'https://silavdele.ru/payment/success'
             },
             description: `Оплата тарифа ${tariff} (${email})`,
             metadata: {
-                order_id: order.id // Передаем наш ID заказа, чтобы потом узнать его в вебхуке
+                order_id: order.id
+            },
+            // !!! ДОБАВИЛИ БЛОК ДЛЯ ЧЕКА (54-ФЗ) !!!
+            receipt: {
+                customer: {
+                    email: email,
+                    phone: phone // Желательно передавать и телефон
+                },
+                items: [
+                    {
+                        description: `Курс: ${tariff}`,
+                        quantity: "1.00",
+                        amount: {
+                            value: amount,
+                            currency: "RUB"
+                        },
+                        vat_code: "1", // 1 - без НДС (обычно для ИП/Патент). Если у тебя НДС, нужно поставить другой код.
+                        payment_mode: "full_payment",
+                        payment_subject: "service" // Мы продаем услугу (обучение)
+                    }
+                ]
             }
         }, {
             headers: {
@@ -59,16 +77,17 @@ app.post('/api/payment/create', async (req, res) => {
 
         const paymentData = response.data;
         
-        // 4. Сохраняем ID платежа ЮКассы в нашу БД
+        // 4. Сохраняем ID платежа
         await createPayment(order.id, paymentData.id, amount, paymentData.status);
 
-        // 5. Отдаем ссылку фронтенду
+        // 5. Отдаем ссылку
         res.json({ 
             confirmation_url: paymentData.confirmation.confirmation_url 
         });
 
     } catch (error) {
-        console.error('Ошибка создания платежа:', error.response?.data || error.message);
+        // Выводим подробную ошибку от ЮКассы в консоль сервера
+        console.error('Ошибка ЮКассы:', error.response?.data || error.message);
         res.status(500).json({ error: 'Не удалось создать платеж' });
     }
 });
