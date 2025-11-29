@@ -20,10 +20,15 @@ app.post('/api/payment/create', async (req, res) => {
     try {
         const { email, phone, name, amount, tariff } = req.body;
         
-        console.log('Новый заказ:', { email, amount, tariff });
+        // --- НОВОЕ: Очищаем телефон от мусора (скобок, пробелов, плюсов) ---
+        // Например: "+7 (999) 000-00-00" превратится в "79990000000"
+        // ЮКасса принимает ТОЛЬКО цифры
+        const cleanedPhone = phone.replace(/[^\d]/g, '');
 
-        // 1. Сохраняем пользователя и заказ в БД
-        const user = await findOrCreateUser(email, phone, name);
+        console.log('Новый заказ:', { email, amount, tariff, phone: cleanedPhone });
+
+        // 1. Сохраняем пользователя (с чистым телефоном) и заказ в БД
+        const user = await findOrCreateUser(email, cleanedPhone, name);
         const order = await createOrder(user.id, amount, tariff);
 
         // 2. Готовим запрос в ЮКассу
@@ -51,7 +56,7 @@ app.post('/api/payment/create', async (req, res) => {
             receipt: {
                 customer: {
                     email: email,
-                    phone: phone // Желательно передавать и телефон
+                    phone: cleanedPhone // <--- ОТПРАВЛЯЕМ ЧИСТЫЙ НОМЕР
                 },
                 items: [
                     {
@@ -61,9 +66,9 @@ app.post('/api/payment/create', async (req, res) => {
                             value: amount,
                             currency: "RUB"
                         },
-                        vat_code: "1", // 1 - без НДС (обычно для ИП/Патент). Если у тебя НДС, нужно поставить другой код.
+                        vat_code: "1", // 1 - без НДС
                         payment_mode: "full_payment",
-                        payment_subject: "service" // Мы продаем услугу (обучение)
+                        payment_subject: "service"
                     }
                 ]
             }
