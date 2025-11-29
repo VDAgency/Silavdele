@@ -6,7 +6,9 @@ import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 
-// Подключаем наши функции работы с БД
+// Подключаем pool напрямую для проверки статуса
+import pool from './db.js'; 
+// Подключаем функции сервиса
 import { findOrCreateUser, createOrder, createPayment, updateOrderStatus } from './services/dbService.js';
 
 const app = express();
@@ -20,24 +22,22 @@ app.post('/api/payment/create', async (req, res) => {
     try {
         const { email, phone, name, amount, tariff } = req.body;
         
-        // --- НОВОЕ: Очищаем телефон от мусора (скобок, пробелов, плюсов) ---
-        // Например: "+7 (999) 000-00-00" превратится в "79990000000"
-        // ЮКасса принимает ТОЛЬКО цифры
+        // Очищаем телефон (твоя рабочая логика)
         const cleanedPhone = phone.replace(/[^\d]/g, '');
 
         console.log('Новый заказ:', { email, amount, tariff, phone: cleanedPhone });
 
-        // 1. Сохраняем пользователя (с чистым телефоном) и заказ в БД
+        // 1. Сохраняем в БД
         const user = await findOrCreateUser(email, cleanedPhone, name);
         const order = await createOrder(user.id, amount, tariff);
 
-        // 2. Готовим запрос в ЮКассу
+        // 2. Готовим запрос
         const idempotenceKey = uuidv4();
         const shopId = process.env.YOOKASSA_SHOP_ID;
         const secretKey = process.env.YOOKASSA_SECRET_KEY;
         const auth = Buffer.from(`${shopId}:${secretKey}`).toString('base64');
 
-        // 3. Отправляем запрос в ЮКассу (С ЧЕКОМ!)
+        // 3. Отправляем в ЮКассу
         const response = await axios.post('https://api.yookassa.ru/v3/payments', {
             amount: {
                 value: amount,
@@ -46,17 +46,18 @@ app.post('/api/payment/create', async (req, res) => {
             capture: true,
             confirmation: {
                 type: 'redirect',
-                return_url: 'https://silavdele.ru/payment/success'
+                // --- ИЗМЕНЕНИЕ: Добавляем ID заказа в ссылку ---
+                // Это нужно, чтобы страница Success знала, какой заказ проверять
+                return_url: `https://silavdele.ru/payment/success?order_id=${order.id}`
             },
             description: `Оплата тарифа ${tariff} (${email})`,
             metadata: {
                 order_id: order.id
             },
-            // !!! ДОБАВИЛИ БЛОК ДЛЯ ЧЕКА (54-ФЗ) !!!
             receipt: {
                 customer: {
                     email: email,
-                    phone: cleanedPhone // <--- ОТПРАВЛЯЕМ ЧИСТЫЙ НОМЕР
+                    phone: cleanedPhone
                 },
                 items: [
                     {
@@ -66,7 +67,7 @@ app.post('/api/payment/create', async (req, res) => {
                             value: amount,
                             currency: "RUB"
                         },
-                        vat_code: "1", // 1 - без НДС
+                        vat_code: "1",
                         payment_mode: "full_payment",
                         payment_subject: "service"
                     }
@@ -91,38 +92,52 @@ app.post('/api/payment/create', async (req, res) => {
         });
 
     } catch (error) {
-        // Выводим подробную ошибку от ЮКассы в консоль сервера
         console.error('Ошибка ЮКассы:', error.response?.data || error.message);
         res.status(500).json({ error: 'Не удалось создать платеж' });
     }
 });
 
-// --- 2. ВЕБХУК (Уведомление от ЮКассы) ---
+// --- 2. ВЕБХУК (Обновлен для обработки отмены) ---
 app.post('/api/payment/webhook', async (req, res) => {
     try {
         const { event, object } = req.body;
+        const yookassaId = object.id;
+        const status = object.status; // succeeded, canceled, pending
 
-        // Нас интересует только успешная оплата
-        if (event === 'payment.succeeded') {
-            const yookassaId = object.id;
-            const status = object.status;
-            
-            console.log(`💰 Пришла оплата! ID: ${yookassaId}`);
+        console.log(`🔔 Вебхук: ${event} -> ${status}`);
 
-            // Обновляем статус в БД
-            const orderId = await updateOrderStatus(yookassaId, status);
+        // --- ИЗМЕНЕНИЕ: Обновляем статус ВСЕГДА (и при успехе, и при отмене) ---
+        const orderId = await updateOrderStatus(yookassaId, status);
 
-            if (orderId) {
-                console.log(`✅ Заказ #${orderId} оплачен. Тут будем выдавать доступ к курсу...`);
-                // TODO: Здесь будет вызов функции отправки письма и добавления в Skillspace
-            }
+        // Если оплата успешна - логика выдачи доступа
+        if (event === 'payment.succeeded' && orderId) {
+            console.log(`✅ Заказ #${orderId} успешно оплачен! Выдаем доступ...`);
+            // TODO: Отправка письма и Skillspace
         }
 
-        // Всегда отвечаем 200 OK, иначе ЮКасса будет слать запросы снова и снова
         res.status(200).send('OK');
     } catch (error) {
         console.error('Ошибка вебхука:', error);
         res.status(500).send('Error');
+    }
+});
+
+// --- 3. НОВОЕ: Роут для проверки статуса (для Фронтенда) ---
+app.get('/api/payment/check/:orderId', async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        
+        // Простой запрос в базу, чтобы узнать статус заказа
+        const result = await pool.query('SELECT status FROM orders WHERE id = $1', [orderId]);
+
+        if (result.rows.length > 0) {
+            res.json({ status: result.rows[0].status });
+        } else {
+            res.status(404).json({ error: 'Заказ не найден' });
+        }
+    } catch (error) {
+        console.error('Ошибка проверки статуса:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
 
