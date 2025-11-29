@@ -97,19 +97,22 @@ app.post('/api/payment/create', async (req, res) => {
     }
 });
 
-// --- 2. ВЕБХУК (Обновлен для обработки отмены) ---
+// --- 2. ВЕБХУК (Уведомление от ЮКассы) ---
 app.post('/api/payment/webhook', async (req, res) => {
     try {
         const { event, object } = req.body;
         const yookassaId = object.id;
         const status = object.status; // succeeded, canceled, pending
+        
+        // --- ИЗМЕНЕНИЕ: Достаем ID заказа из metadata ---
+        // Это гарантирует, что мы найдем заказ, даже если база затупит
+        const metaOrderId = object.metadata && object.metadata.order_id;
 
-        console.log(`🔔 Вебхук: ${event} -> ${status}`);
+        console.log(`🔔 Вебхук: ${event} -> ${status}. OrderID из метаданных: ${metaOrderId}`);
 
-        // --- ИЗМЕНЕНИЕ: Обновляем статус ВСЕГДА (и при успехе, и при отмене) ---
-        const orderId = await updateOrderStatus(yookassaId, status);
+        // Передаем metaOrderId в функцию обновления
+        const orderId = await updateOrderStatus(yookassaId, status, metaOrderId);
 
-        // Если оплата успешна - логика выдачи доступа
         if (event === 'payment.succeeded' && orderId) {
             console.log(`✅ Заказ #${orderId} успешно оплачен! Выдаем доступ...`);
             // TODO: Отправка письма и Skillspace

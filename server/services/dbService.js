@@ -1,5 +1,5 @@
+// dbService.js
 import dotenv from 'dotenv';
-// Указываем путь к .env (на всякий случай, как делали в db.js)
 dotenv.config({ path: '/var/www/silavdele/.env' });
 import pool from '../db.js';
 
@@ -33,29 +33,37 @@ export const createPayment = async (orderId, yookassaId, amount, status) => {
     );
 };
 
-// 4. Обновить статус заказа (ИСПРАВЛЕННАЯ ВЕРСИЯ)
-export const updateOrderStatus = async (yookassaId, status) => {
-    // Сначала обновляем таблицу платежей
+// 4. Обновить статус заказа (УЛУЧШЕННАЯ ВЕРСИЯ)
+// Теперь принимаем metaOrderId (ID заказа напрямую из вебхука)
+export const updateOrderStatus = async (yookassaId, status, metaOrderId = null) => {
+    console.log(`🔄 Обновляем статус. YookassaID: ${yookassaId}, Status: ${status}, OrderID: ${metaOrderId}`);
+
+    // 1. Обновляем статус в таблице платежей (для истории)
     const paymentRes = await pool.query(
         'UPDATE payments SET status = $1 WHERE yookassa_payment_id = $2 RETURNING order_id',
         [status, yookassaId]
     );
     
-    if (paymentRes.rows.length > 0) {
-        const orderId = paymentRes.rows[0].order_id;
-        
-        // --- ИЗМЕНЕНИЯ ЗДЕСЬ ---
+    // Пытаемся узнать ID заказа: либо из базы, либо из метаданных вебхука
+    let orderId = metaOrderId;
+    
+    if (!orderId && paymentRes.rows.length > 0) {
+        orderId = paymentRes.rows[0].order_id;
+    }
+
+    // Если ID заказа у нас есть - обновляем его статус
+    if (orderId) {
+        console.log(`✅ Нашли заказ #${orderId}. Меняем статус на ${status}`);
         
         if (status === 'succeeded') {
-            // Если успех - ставим paid
             await pool.query('UPDATE orders SET status = $1 WHERE id = $2', ['paid', orderId]);
-            return orderId;
         } 
         else if (status === 'canceled') {
-            // Если отмена - ставим canceled (ВОТ ЭТОГО НЕ БЫЛО!)
             await pool.query('UPDATE orders SET status = $1 WHERE id = $2', ['canceled', orderId]);
-            return orderId;
         }
+        return orderId;
+    } else {
+        console.error(`❌ Ошибка: Не удалось найти ID заказа для платежа ${yookassaId}`);
+        return null;
     }
-    return null;
 };
