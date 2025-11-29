@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import PublicOffer from "./pages/PublicOffer";
+import PaymentSuccess from './pages/PaymentSuccess';
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,8 @@ const App = () => (
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
+
+          <Route path="/payment/success" element={<PaymentSuccess />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
