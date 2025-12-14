@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 const initDb = async () => {
     try {
         // Читаем файл schema.sql
-        const schemaPath = path.join(__dirname, 'schema.sql');
+        const schemaPath = path.join(__dirname, 'sql', 'schema.sql');
         const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 
         console.log('Начинаю обновление структуры базы данных...');
