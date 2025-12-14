@@ -17,10 +17,10 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 210 15% 15%;
 
-    --primary: 200 100% 40%;
+    --primary: 200 98% 43%; /* #0292DA из Figma */
     --primary-foreground: 0 0% 100%;
     
-    --primary-hover: 200 100% 35%;
+    --primary-hover: 200 98% 38%;
 
     --secondary: 210 10% 25%;
     --secondary-foreground: 0 0% 100%;
@@ -28,7 +28,7 @@ All colors MUST be HSL.
     --muted: 210 20% 96%;
     --muted-foreground: 210 10% 50%;
 
-    --accent: 200 90% 50%;
+    --accent: 200 100% 70%; /* #68CDFF из Figma */
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84.2% 60.2%;
@@ -40,7 +40,8 @@ All colors MUST be HSL.
 
     --radius: 0.75rem;
     
-    --gradient-primary: linear-gradient(135deg, hsl(200 100% 40%), hsl(200 90% 50%));
+    --gradient-primary: linear-gradient(135deg, hsl(200 98% 43%), hsl(200 100% 70%)); /* #0292DA to #68CDFF */
+    --gradient-primary-alt: linear-gradient(135deg, hsl(200 98% 43%), hsl(200 86% 61%), hsl(200 100% 70%)); /* #0292DA to #44B8F2 to #68CDFF */
     --gradient-subtle: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 20% 98%));
     
     --shadow-sm: 0 2px 8px -2px hsl(210 15% 15% / 0.08);
@@ -107,6 +108,10 @@ All colors MUST be HSL.
 @layer base {
   * {
     @apply border-border;
+  }
+
+  html {
+  scroll-behavior: smooth;
   }
 
   body {
