@@ -1,77 +1,81 @@
-// test-uds.js
+import crypto from 'crypto';
 import axios from 'axios';
 
-// ================= НАСТРОЙКИ =================
-// Возьми в админке UDS: Настройки -> Интеграция
+// ================= НАСТРОЙКИ (ТВОИ ВЕРНЫЕ ДАННЫЕ) =================
 const API_KEY = 'NTNhNDg2MjctODYzMC00YmFiLTk2OWMtZTk1ZTgyYmQ5MmQz'; 
 const COMPANY_ID = '549756210731'; 
 
-// Возьми реальный код из приложения UDS (свой или друга)
-// Например: 'u12345' или буквенный код
+// Код друга и тестовый телефон
 const REFERRER_CODE = 'tqqf9586'; 
+const NEW_CLIENT_PHONE = '+79140769557'; // Поменял последнюю цифру, чтобы был свежий номер
+// ==================================================================
 
-// Придумай номер телефона, которого ТОЧНО НЕТ в твоей базе UDS
-const NEW_CLIENT_PHONE = '+79140769556'; 
-// =============================================
+// Настройка заголовков
+const authString = Buffer.from(`${COMPANY_ID}:${API_KEY}`).toString('base64');
+const config = {
+    headers: {
+        'Authorization': `Basic ${authString}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+};
+const API_URL = 'https://api.uds.app/partner/v2';
 
-async function testUdsIntegration() {
-    // Кодируем ключ для авторизации
-    const authString = Buffer.from(`${COMPANY_ID}:${API_KEY}`).toString('base64');
-    
-    const config = {
-        headers: {
-            'Authorization': `Basic ${authString}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        }
-    };
+async function runTests() {
+    console.log(`--- ДИАГНОСТИКА UDS ---`);
 
-    const API_URL = 'https://api.uds.app/partner/v2';
-
-    console.log(`--- НАЧИНАЕМ ТЕСТ UDS ---`);
-    console.log(`Пробуем создать операцию для нового телефона: ${NEW_CLIENT_PHONE}`);
-    console.log(`Используем промокод пригласителя: ${REFERRER_CODE}`);
-
+    // === ТЕСТ 1: ПРОДАЖА БЕЗ КОДА (Проверка кассира) ===
+    console.log(`\n1️⃣ ТЕСТ 1: Пробуем продажу БЕЗ кода друга (только телефон)...`);
     try {
-        const payload = {
-            code: REFERRER_CODE, // Гипотеза: это свяжет их
-            participant: {
-                phone: NEW_CLIENT_PHONE
-            },
-            nonce: `test_${Date.now()}`,
-            cashier: {
-                externalId: "site_bot" 
-            },
-            total: 100, // Сумма покупки 100 руб
-            cash: 100,
-            description: "Тестовая покупка с сайта (Скрипт проверки)"
+        const payloadNoCode = {
+            participant: { phone: NEW_CLIENT_PHONE },
+            nonce: crypto.randomUUID(),
+            cashier: { externalId: "site_payment" }, // Попробуем такое имя
+            total: 10, 
+            cash: 10,
+            description: "Test without code"
         };
 
-        // Отправляем запрос
-        const response = await axios.post(`${API_URL}/operations`, payload, config);
-        
-        console.log('\n✅ УСПЕХ! Ответ от UDS:');
-        console.log(JSON.stringify(response.data, null, 2));
-        
-        console.log('\n⬇️ ЧТО ДЕЛАТЬ ДАЛЬШЕ:');
-        console.log('1. Зайди в UDS Admin (Клиенты).');
-        console.log(`2. Найди клиента с телефоном ${NEW_CLIENT_PHONE}.`);
-        console.log('3. Посмотри в его профиле: Указан ли там, "Кто пригласил"? (Должен быть владелец кода ' + REFERRER_CODE + ')');
-
+        const res1 = await axios.post(`${API_URL}/operations`, payloadNoCode, config);
+        console.log('✅ ТЕСТ 1 УСПЕХ! Продажа прошла. Проблема НЕ в кассире.');
+        console.log('ID операции:', res1.data.id);
     } catch (error) {
-        console.log('\n❌ ОШИБКА ЗАПРОСА:');
-        if (error.response) {
-            console.log(`Статус: ${error.response.status}`);
-            console.log('Ответ сервера:', JSON.stringify(error.response.data, null, 2));
-            
-            if (error.response.data.errorCode === 'notFound' && error.response.data.message.includes('code')) {
-                console.log('\n⚠️ ВЫВОД: UDS не нашел этот код как "код операции".');
-                console.log('Скорее всего, просто передать реф-код в поле "code" нельзя.');
-            }
-        } else {
-            console.log(error.message);
-        }
+        console.log('❌ ТЕСТ 1 ПРОВАЛЕН.');
+        printError(error);
+        return; // Если даже простая продажа не идет, дальше нет смысла
+    }
+
+    // === ТЕСТ 2: ПРОДАЖА С КОДОМ ===
+    console.log(`\n2️⃣ ТЕСТ 2: Пробуем продажу С КОДОМ друга (${REFERRER_CODE})...`);
+    try {
+        const payloadWithCode = {
+            code: REFERRER_CODE,
+            participant: { phone: NEW_CLIENT_PHONE }, // Тот же номер
+            nonce: crypto.randomUUID(),
+            cashier: { externalId: "site_payment" },
+            total: 10,
+            cash: 10,
+            description: "Test WITH referral code"
+        };
+
+        const res2 = await axios.post(`${API_URL}/operations`, payloadWithCode, config);
+        console.log('✅ ТЕСТ 2 УСПЕХ! Реферальная связь сработала!');
+        console.log('Поздравляю, код работает напрямую через API.');
+    } catch (error) {
+        console.log('❌ ТЕСТ 2 ПРОВАЛЕН (Код не принят).');
+        console.log('ВЫВОД: API не дает провести оплату по статичному коду приглашения.');
+        console.log('РЕШЕНИЕ: Мы будем использовать другой алгоритм (Сначала создание юзера -> Потом оплата).');
+        printError(error);
     }
 }
 
-testUdsIntegration();
+function printError(error) {
+    if (error.response) {
+        console.log(`Статус: ${error.response.status}`);
+        console.log('Ответ:', JSON.stringify(error.response.data, null, 2));
+    } else {
+        console.log(error.message);
+    }
+}
+
+runTests();
