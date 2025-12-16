@@ -9,10 +9,10 @@ import axios from 'axios';
 
 // --- ИМПОРТЫ СЕРВИСОВ ---
 import pool from './db.js'; 
-import { findOrCreateUser, createOrder, createPayment, updateOrderStatus } from './services/dbService.js';
+// ВАЖНО: Добавили updateUserExternalIds в импорт
+import { findOrCreateUser, createOrder, createPayment, updateOrderStatus, updateUserExternalIds } from './services/dbService.js';
 import { addUserToCourse } from './services/skillspaceService.js';
 import { sendWelcomeEmail } from './services/emailService.js';
-// Добавляем новый сервис UDS
 import { sendUdsPurchase } from './services/udsService.js';
 
 const app = express();
@@ -24,24 +24,22 @@ app.use(express.json());
 // --- 1. СОЗДАНИЕ ПЛАТЕЖА ---
 app.post('/api/payment/create', async (req, res) => {
     try {
-        // Получаем referrer_code с фронтенда
         const { email, phone, name, amount, tariff, referrer_code } = req.body;
         
-        // Очищаем телефон от лишних символов (оставляем +7...)
-        // Если телефон начинается с 8, меняем на +7
+        // Очистка телефона (превращаем 89... и 79... в +79...)
         let cleanedPhone = phone.replace(/[^\d+]/g, '');
         if (cleanedPhone.startsWith('8')) cleanedPhone = '+7' + cleanedPhone.slice(1);
-        if (cleanedPhone.startsWith('7')) cleanedPhone = '+' + cleanedPhone;
+        if (cleanedPhone.startsWith('7') && !cleanedPhone.startsWith('+7')) cleanedPhone = '+' + cleanedPhone;
 
         console.log('📦 Новый заказ:', { email, amount, tariff, phone: cleanedPhone, ref: referrer_code });
 
-        // 1. Сохраняем пользователя и реферальный код в базу
+        // 1. Сохраняем пользователя (и реферала, если есть)
         const user = await findOrCreateUser(email, cleanedPhone, name, referrer_code);
         
         // 2. Создаем заказ
         const order = await createOrder(user.id, amount, tariff);
 
-        // 3. Данные для ЮКассы
+        // 3. Формируем запрос в ЮКассу
         const idempotenceKey = uuidv4();
         const shopId = process.env.YOOKASSA_SHOP_ID;
         const secretKey = process.env.YOOKASSA_SECRET_KEY;
@@ -57,7 +55,7 @@ app.post('/api/payment/create', async (req, res) => {
             description: `Оплата тарифа ${tariff} (${email})`,
             metadata: { 
                 order_id: order.id,
-                referrer_code: referrer_code || '' // Передаем реферала в метаданные, чтобы вернуть в вебхуке
+                referrer_code: referrer_code || '' 
             },
             receipt: {
                 customer: { email: email, phone: cleanedPhone },
@@ -89,34 +87,34 @@ app.post('/api/payment/create', async (req, res) => {
     }
 });
 
-// --- 2. ВЕБХУК (ОСНОВНАЯ ЛОГИКА) ---
+// --- 2. ВЕБХУК (ОРКЕСТРАЦИЯ ВСЕХ СИСТЕМ) ---
 app.post('/api/payment/webhook', async (req, res) => {
     try {
         const { event, object } = req.body;
         
-        // Проверка: обрабатываем только успешные оплаты
+        // Обрабатываем только успешные оплаты
         if (event !== 'payment.succeeded') {
-            console.log(`🔔 Webhook event: ${event} (ignored)`);
             return res.status(200).send('OK');
         }
 
         const yookassaId = object.id;
         const status = object.status;
-        const amountVal = object.amount.value; // Сумма оплаты
+        const amountVal = object.amount.value; 
         
-        // Достаем данные из metadata (которые мы заложили при создании)
+        // Достаем данные из metadata
         const metaOrderId = object.metadata?.order_id;
         const referrerCode = object.metadata?.referrer_code;
 
-        console.log(`💰 Оплата подтверждена! OrderID: ${metaOrderId}, Ref: ${referrerCode}`);
+        console.log(`💰 Webhook: Оплата прошла! ID: ${metaOrderId}, Ref: ${referrerCode}`);
 
         // 1. Обновляем статус заказа в БД
         const orderId = await updateOrderStatus(yookassaId, status, metaOrderId);
 
         if (orderId) {
-            // Загружаем данные пользователя для отправки в сервисы
+            // Получаем полные данные пользователя
+            // Нам нужен user_id, чтобы потом обновить external_ids
             const orderRes = await pool.query(
-                `SELECT o.tariff_code, u.email, u.name, u.phone 
+                `SELECT o.tariff_code, u.id as user_id, u.email, u.name, u.phone 
                  FROM orders o 
                  JOIN users u ON o.user_id = u.id 
                  WHERE o.id = $1`, 
@@ -125,29 +123,42 @@ app.post('/api/payment/webhook', async (req, res) => {
 
             if (orderRes.rows.length > 0) {
                 const data = orderRes.rows[0];
-                console.log(`🚀 Запускаем интеграции для: ${data.email}`);
+                console.log(`🚀 Начинаем обработку для: ${data.email}`);
 
                 // --- A. SKILLSPACE (ОБУЧЕНИЕ) ---
-                // Запускаем асинхронно, но ждем результат для письма
+                console.log('👉 1. Skillspace...');
                 let loginLink = null;
                 try {
                     loginLink = await addUserToCourse(data.email, data.name, data.phone, data.tariff_code);
                     console.log('✅ Skillspace OK');
+                    // Если вдруг Skillspace когда-то начнет возвращать ID, можно сохранить:
+                    // await updateUserExternalIds(data.user_id, studentId, null);
                 } catch (err) {
                     console.error('❌ Skillspace Error:', err.message);
-                    // Не прерываем, идем дальше
                 }
 
                 // --- B. UDS (МАРКЕТИНГ) ---
-                // Отправляем данные в CRM. Если 403 ошибка - она обработается внутри и не крашнет сервер
-                // Запускаем без await, пусть работает в фоне (чтобы не задерживать ответ ЮКассе)
-                sendUdsPurchase(data.phone, amountVal, referrerCode).then(res => {
-                    if (res.success) console.log('✅ UDS Sync Complete');
-                });
+                console.log('👉 2. UDS...');
+                // Запускаем UDS и обрабатываем результат, чтобы сохранить ID
+                sendUdsPurchase(data.phone, amountVal, referrerCode)
+                    .then(async (res) => {
+                        if (res.success) {
+                            console.log('✅ UDS Sync Complete');
+                            // Если UDS вернул ID клиента, сохраняем его в нашу базу навсегда
+                            if (res.udsClientId) {
+                                await updateUserExternalIds(data.user_id, null, res.udsClientId);
+                                console.log('💾 UDS ID клиента сохранен в базу.');
+                            }
+                        }
+                    })
+                    .catch(err => {
+                        console.error('⚠️ UDS Error:', err.message);
+                    });
                 
                 // --- C. EMAIL (ПИСЬМО) ---
+                console.log('👉 3. Email...');
                 if (loginLink) {
-                    sendWelcomeEmail(data.email, data.name, loginLink);
+                    await sendWelcomeEmail(data.email, data.name, loginLink);
                 } else {
                     console.error('⚠️ Письмо не отправлено: нет ссылки от Skillspace');
                 }

@@ -4,79 +4,73 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 dotenv.config();
 
-// Данные UDS (Лучше вынести в .env, но пока оставим здесь для надежности)
-// ВСТАВЬ СЮДА СВОЙ ПОСЛЕДНИЙ РАБОЧИЙ КЛЮЧ
-const API_KEY = 'ZjViZDJjZTItMjg4OS00NTVjLWE0Y2UtZTJlZGI0NGRhNGNj'; 
-const COMPANY_ID = '549756210731'; // Твой ID
-
+// Ключи UDS
+const API_KEY = process.env.UDS_API_KEY || 'ZjViZDJjZTItMjg4OS00NTVjLWE0Y2UtZTJlZGI0NGRhNGNj'; 
+const COMPANY_ID = process.env.UDS_COMPANY_ID || '549756210731'; 
 const API_URL = 'https://api.uds.app/partner/v2';
 
-// Хелпер для заголовков
 const getHeaders = () => {
+    // Авторизация точно как в успешном тесте
     const authString = Buffer.from(`${COMPANY_ID}:${API_KEY}`).toString('base64');
     return {
         'Authorization': `Basic ${authString}`,
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'X-Origin-Request-Id': Date.now().toString(),
+        'X-Timestamp': new Date().toISOString()
     };
 };
 
 export const sendUdsPurchase = async (phone, amount, referrerCode = null) => {
     try {
-        console.log(`💎 UDS: Пробуем отправить покупку для ${phone} (Реферал: ${referrerCode || 'Нет'})`);
+        console.log(`💎 UDS: Отправка покупки для ${phone}. Сумма: ${amount}. Реферал: ${referrerCode || 'Нет'}`);
 
-        // 1. Получаем ID филиала (это обязательно для создания операции)
-        // Мы делаем это каждый раз, чтобы не хардкодить ID, если он сменится
-        const branchRes = await axios.get(`${API_URL}/branches`, { headers: getHeaders() });
-        const branchId = branchRes.data.rows && branchRes.data.rows[0]?.id;
-
-        if (!branchId) {
-            console.error('⚠️ UDS Warning: Не найдены филиалы. Операция невозможна.');
-            return { success: false, reason: 'no_branches' };
-        }
-
-        // 2. Формируем тело запроса
+        // Кодируем телефон как в документации (на случай спецсимволов, хотя в body это не обязательно, но для порядка)
+        // В теле запроса (body) отправляем обычный телефон, кодировать нужно только в URL (GET)
+        
         const payload = {
-            participant: { phone: phone },
             nonce: crypto.randomUUID(),
-            cashier: { externalId: "site_bot" },
-            branch: { id: branchId },
+            participant: { 
+                phone: phone 
+            },
+            cashier: { 
+                externalId: "website_backend",
+                name: "Сайт Школы"
+            },
             total: amount,
             cash: amount,
             description: "Оплата курса на сайте"
         };
 
-        // Добавляем реферальный код, только если он есть
+        // Если есть реферальный код, добавляем его
         if (referrerCode) {
             payload.code = referrerCode;
         }
 
-        // 3. Отправляем в UDS
+        // Отправляем запрос на создание операции
         const response = await axios.post(`${API_URL}/operations`, payload, { headers: getHeaders() });
 
         console.log(`✅ UDS Успех! ID операции: ${response.data.id}`);
-        return { success: true, id: response.data.id };
+        
+        // Возвращаем ID клиента (UDS сам вернет его в ответе, даже если создал только что)
+        return { 
+            success: true, 
+            operationId: response.data.id,
+            udsClientId: response.data.customer?.uid || response.data.customer?.id 
+        };
 
     } catch (error) {
-        // ОБРАБОТКА ОШИБОК
-        if (error.response) {
-            const status = error.response.status;
-            const data = error.response.data;
-
-            if (status === 403) {
-                console.log('⚠️ UDS Info: Интеграция недоступна на текущем тарифе (403). Данные не отправлены, но сайт работает дальше.');
-                return { success: false, reason: 'tariff_restriction' };
-            }
-            
-            if (status === 400 || status === 404) {
-                 console.error('❌ UDS Error (Данные):', JSON.stringify(data));
-                 // Если ошибка в реф-коде (например, код устарел), можно попробовать отправить без него
-                 // Но пока оставим так
-                 return { success: false, reason: 'validation_error', details: data };
-            }
+        // ЛОГИКА ПОВТОРНОЙ ОТПРАВКИ (RETRY)
+        // Если UDS вернул 404 или 400 из-за неверного кода реферала - пробуем провести оплату БЕЗ кода.
+        // Чтобы клиент не потерял баллы за покупку, даже если ошибся в коде друга.
+        if (referrerCode && error.response && (error.response.status === 404 || error.response.status === 400)) {
+            console.warn('⚠️ UDS: Код реферала не принят. Пробуем провести оплату без кода...');
+            return sendUdsPurchase(phone, amount, null); // Рекурсивный вызов без кода
         }
+
+        console.error('❌ Ошибка UDS:', error.response?.data || error.message);
         
-        console.error('❌ UDS System Error:', error.message);
-        return { success: false, reason: 'network_error' };
+        // Возвращаем false, но не ломаем сервер
+        return { success: false, error: error.message };
     }
 };
