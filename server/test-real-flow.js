@@ -2,12 +2,12 @@ import axios from 'axios';
 import crypto from 'crypto';
 
 // --- НАСТРОЙКИ ---
+// Твои рабочие ключи
 const API_KEY = 'ZjViZDJjZTItMjg4OS00NTVjLWE0Y2UtZTJlZGI0NGRhNGNj'; 
 const COMPANY_ID = '549756210731'; 
 const API_URL = 'https://api.uds.app/partner/v2';
 
-// 1. Сначала проверь на существующем (Александр): '+79372752934'
-// 2. Потом на новом (твоем): '+79871658054'
+// Твой номер (у которого uid: null)
 const PHONE = '+79871658054'; 
 const AMOUNT = 10;
 
@@ -23,7 +23,7 @@ const getHeaders = () => {
 };
 
 async function runRealFlow() {
-    console.log(`🚀 ЗАПУСК: ${PHONE}`);
+    console.log(`🚀 ЗАПУСК ТЕСТА: ${PHONE}`);
     let participantData = {};
 
     // --- ШАГ 1: ПОИСК ---
@@ -32,16 +32,21 @@ async function runRealFlow() {
         const encodedPhone = encodeURIComponent(PHONE);
         const resFind = await axios.get(`${API_URL}/customers/find?phone=${encodedPhone}`, { headers: getHeaders() });
         
-        console.log(`✅ Клиент НАЙДЕН!`);
-        console.log(`   UID: ${resFind.data.user.uid} (${resFind.data.user.displayName})`);
+        const uid = resFind.data.user.uid;
+        console.log(`✅ Клиент НАЙДЕН! UID: ${uid} (${resFind.data.user.displayName})`);
         
-        // Если нашли - будем платить по UID
-        participantData = { uid: resFind.data.user.uid };
+        // ЛОГИКА ВЫБОРА: Если есть UID - берем его. Если нет (null) - берем телефон.
+        if (uid) {
+            console.log('👉 Используем UID для оплаты.');
+            participantData = { uid: uid };
+        } else {
+            console.log('👉 UID пустой (клиент не в приложении). Используем ТЕЛЕФОН.');
+            participantData = { phone: PHONE };
+        }
 
     } catch (error) {
         if (error.response && error.response.status === 404) {
-            console.log(`ℹ️ Клиент НЕ найден. Будем создавать через покупку.`);
-            // Если не нашли - будем платить по Телефону
+            console.log(`ℹ️ Клиент НЕ найден. Будем создавать через покупку (по телефону).`);
             participantData = { phone: PHONE };
         } else {
             console.log(`❌ Ошибка поиска: ${error.message}`);
@@ -54,24 +59,30 @@ async function runRealFlow() {
     try {
         const payload = {
             nonce: crypto.randomUUID(),
-            // UDS сам разберется: если тут UID - найдет, если Phone - создаст
-            participant: participantData, 
-            cashier: { externalId: "site_bot", name: "Site" },
-            total: AMOUNT,
-            cash: AMOUNT,
+            participant: participantData, // Тут теперь или {uid: "..."} или {phone: "..."}
+            cashier: { 
+                externalId: "site_bot", 
+                name: "Site" 
+            },
+            // ВАЖНО: Согласно документации, суммы должны быть внутри receipt
+            receipt: {
+                total: AMOUNT,
+                cash: AMOUNT,
+                points: 0,
+                number: "ORDER-" + Date.now() // Номер чека (произвольный)
+            },
             description: "Оплата курса"
         };
 
-        // ВАЖНО: Мы НЕ передаем поле 'code', чтобы не получить 404.
-        
         const resOp = await axios.post(`${API_URL}/operations`, payload, { headers: getHeaders() });
         console.log(`✅✅✅ УСПЕХ! Операция проведена.`);
         console.log(`ID Операции: ${resOp.data.id}`);
-        console.log(`Данные клиента: ${JSON.stringify(resOp.data.customer)}`);
+        console.log(`Данные:`, resOp.data);
 
     } catch (error) {
         console.log(`❌ Ошибка покупки:`);
         if (error.response) {
+            console.log(`Статус: ${error.response.status}`);
             console.log(JSON.stringify(error.response.data, null, 2));
         } else {
             console.log(error.message);
