@@ -1,19 +1,28 @@
-// server/index.js
 import dotenv from 'dotenv';
 dotenv.config();
-
 import express from 'express';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
+import jwt from 'jsonwebtoken';
 
 // --- ИМПОРТЫ СЕРВИСОВ ---
 import pool from './db.js'; 
-// ВАЖНО: Добавили updateUserExternalIds в импорт
-import { findOrCreateUser, createOrder, createPayment, updateOrderStatus, updateUserExternalIds } from './services/dbService.js';
+import { 
+    findOrCreateUser, 
+    createOrder, 
+    createPayment, 
+    updateOrderStatus, 
+    updateUserExternalIds,
+    registerUser, 
+    loginUser, 
+    processCommissions, 
+    getUserDashboard 
+} from './services/dbService.js';
 import { addUserToCourse } from './services/skillspaceService.js';
 import { sendWelcomeEmail } from './services/emailService.js';
 import { sendUdsPurchase } from './services/udsService.js';
+import { verifyToken } from './middleware/authMiddleware.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -21,29 +30,85 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// --- 1. СОЗДАНИЕ ПЛАТЕЖА ---
+// ==========================================
+// 1. АВТОРИЗАЦИЯ (AUTH)
+// ==========================================
+
+// Регистрация (Создание пароля)
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        const { name, email, phone, password, referrer_code } = req.body;
+        
+        // Очистка телефона
+        let cleanedPhone = phone.replace(/[^\d+]/g, '');
+        if (cleanedPhone.startsWith('8')) cleanedPhone = '+7' + cleanedPhone.slice(1);
+        if (cleanedPhone.startsWith('7') && !cleanedPhone.startsWith('+7')) cleanedPhone = '+' + cleanedPhone;
+
+        const user = await registerUser(email, cleanedPhone, name, password, referrer_code);
+        
+        // Создаем токен (действует 30 дней)
+        const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+        
+        res.json({ token, user: { name: user.name, email: user.email, role: user.role } });
+    } catch (e) {
+        console.error('Ошибка регистрации:', e);
+        res.status(500).json({ error: 'Ошибка регистрации' });
+    }
+});
+
+// Вход
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const user = await loginUser(email, password);
+
+        if (!user) return res.status(400).json({ error: 'Неверный email или пароль' });
+        if (user === 'no_password') return res.status(400).json({ error: 'Аккаунт существует, но пароль не задан. Восстановите доступ.' });
+
+        const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+        res.json({ token, user: { name: user.name, email: user.email, role: user.role } });
+    } catch (e) {
+        console.error('Ошибка входа:', e);
+        res.status(500).json({ error: 'Ошибка входа' });
+    }
+});
+
+// Данные Личного Кабинета (Защищено)
+app.get('/api/dashboard', verifyToken, async (req, res) => {
+    try {
+        const data = await getUserDashboard(req.user.id);
+        res.json(data);
+    } catch (e) {
+        console.error('Ошибка дашборда:', e);
+        res.status(500).json({ error: 'Ошибка получения данных' });
+    }
+});
+
+// ==========================================
+// 2. ОПЛАТА (PAYMENT)
+// ==========================================
+
+// Создание платежа
 app.post('/api/payment/create', async (req, res) => {
     try {
         const { email, phone, name, amount, tariff, referrer_code } = req.body;
         
-        // Очистка телефона (превращаем 89... и 79... в +79...)
+        // Очистка телефона
         let cleanedPhone = phone.replace(/[^\d+]/g, '');
         if (cleanedPhone.startsWith('8')) cleanedPhone = '+7' + cleanedPhone.slice(1);
         if (cleanedPhone.startsWith('7') && !cleanedPhone.startsWith('+7')) cleanedPhone = '+' + cleanedPhone;
 
         console.log('📦 Новый заказ:', { email, amount, tariff, phone: cleanedPhone, ref: referrer_code });
 
-        // 1. Сохраняем пользователя (и реферала, если есть)
+        // 1. Сохраняем пользователя и реферальный код в базу
         const user = await findOrCreateUser(email, cleanedPhone, name, referrer_code);
         
         // 2. Создаем заказ
         const order = await createOrder(user.id, amount, tariff);
 
-        // 3. Формируем запрос в ЮКассу
+        // 3. Данные для ЮКассы
         const idempotenceKey = uuidv4();
-        const shopId = process.env.YOOKASSA_SHOP_ID;
-        const secretKey = process.env.YOOKASSA_SECRET_KEY;
-        const auth = Buffer.from(`${shopId}:${secretKey}`).toString('base64');
+        const auth = Buffer.from(`${process.env.YOOKASSA_SHOP_ID}:${process.env.YOOKASSA_SECRET_KEY}`).toString('base64');
 
         const response = await axios.post('https://api.yookassa.ru/v3/payments', {
             amount: { value: amount, currency: 'RUB' },
@@ -87,21 +152,18 @@ app.post('/api/payment/create', async (req, res) => {
     }
 });
 
-// --- 2. ВЕБХУК (ОРКЕСТРАЦИЯ ВСЕХ СИСТЕМ) ---
+// Вебхук (Главная логика после оплаты)
 app.post('/api/payment/webhook', async (req, res) => {
     try {
         const { event, object } = req.body;
         
-        // Обрабатываем только успешные оплаты
         if (event !== 'payment.succeeded') {
             return res.status(200).send('OK');
         }
 
         const yookassaId = object.id;
         const status = object.status;
-        const amountVal = object.amount.value; 
-        
-        // Достаем данные из metadata
+        const amountVal = Number(object.amount.value); 
         const metaOrderId = object.metadata?.order_id;
         const referrerCode = object.metadata?.referrer_code;
 
@@ -112,12 +174,9 @@ app.post('/api/payment/webhook', async (req, res) => {
 
         if (orderId) {
             // Получаем полные данные пользователя
-            // Нам нужен user_id, чтобы потом обновить external_ids
             const orderRes = await pool.query(
                 `SELECT o.tariff_code, u.id as user_id, u.email, u.name, u.phone 
-                 FROM orders o 
-                 JOIN users u ON o.user_id = u.id 
-                 WHERE o.id = $1`, 
+                 FROM orders o JOIN users u ON o.user_id = u.id WHERE o.id = $1`, 
                 [orderId]
             );
 
@@ -125,26 +184,22 @@ app.post('/api/payment/webhook', async (req, res) => {
                 const data = orderRes.rows[0];
                 console.log(`🚀 Начинаем обработку для: ${data.email}`);
 
-                // --- A. SKILLSPACE (ОБУЧЕНИЕ) ---
+                // --- A. SKILLSPACE ---
                 console.log('👉 1. Skillspace...');
                 let loginLink = null;
                 try {
                     loginLink = await addUserToCourse(data.email, data.name, data.phone, data.tariff_code);
                     console.log('✅ Skillspace OK');
-                    // Если вдруг Skillspace когда-то начнет возвращать ID, можно сохранить:
-                    // await updateUserExternalIds(data.user_id, studentId, null);
                 } catch (err) {
                     console.error('❌ Skillspace Error:', err.message);
                 }
 
-                // --- B. UDS (МАРКЕТИНГ) ---
+                // --- B. UDS ---
                 console.log('👉 2. UDS...');
-                // Запускаем UDS и обрабатываем результат, чтобы сохранить ID
                 sendUdsPurchase(data.phone, amountVal, referrerCode)
                     .then(async (res) => {
                         if (res.success) {
                             console.log('✅ UDS Sync Complete');
-                            // Если UDS вернул ID клиента, сохраняем его в нашу базу навсегда
                             if (res.udsClientId) {
                                 await updateUserExternalIds(data.user_id, null, res.udsClientId);
                                 console.log('💾 UDS ID клиента сохранен в базу.');
@@ -155,13 +210,15 @@ app.post('/api/payment/webhook', async (req, res) => {
                         console.error('⚠️ UDS Error:', err.message);
                     });
                 
-                // --- C. EMAIL (ПИСЬМО) ---
+                // --- C. EMAIL ---
                 console.log('👉 3. Email...');
                 if (loginLink) {
                     await sendWelcomeEmail(data.email, data.name, loginLink, referrerCode);
-                } else {
-                    console.error('⚠️ Письмо не отправлено: нет ссылки от Skillspace');
                 }
+
+                // --- D. НАЧИСЛЕНИЕ КОМИССИЙ (НОВОЕ) ---
+                console.log('👉 4. Финансы...');
+                await processCommissions(orderId, data.user_id, amountVal);
             }
         }
 
@@ -172,7 +229,7 @@ app.post('/api/payment/webhook', async (req, res) => {
     }
 });
 
-// --- 3. ПРОВЕРКА СТАТУСА ---
+// Проверка статуса (для фронтенда)
 app.get('/api/payment/check/:orderId', async (req, res) => {
     try {
         const { orderId } = req.params;
