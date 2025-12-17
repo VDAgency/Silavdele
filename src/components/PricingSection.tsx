@@ -100,16 +100,21 @@ const PricingSection = () => {
     setLoading(true);
 
     try {
+      // 1. Достаем реферальный код из памяти браузера (который поймал App.tsx)
+      const savedRefCode = localStorage.getItem('uds_ref_code');
+      console.log("📤 Отправляем реферальный код:", savedRefCode); // Для проверки в консоли
+
       // Убираем пробелы из цены ("15 500" -> 15500) и приводим к формату "15500.00"
       const cleanPrice = parseFloat(selectedTariff.price.replace(/\s/g, '')).toFixed(2);
 
-      // Отправляем данные на наш сервер
+      // 2. Отправляем его на сервер вместе с остальными данными
       const response = await axios.post('/api/payment/create', {
         amount: cleanPrice,
         email: formData.email,
         phone: formData.phone,
         name: formData.name,
-        tariff: selectedTariff.name
+        tariff: selectedTariff.name,
+        referrer_code: savedRefCode || null
       });
 
       // Если сервер вернул ссылку, переходим на неё

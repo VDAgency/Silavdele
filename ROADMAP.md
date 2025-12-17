@@ -1,17 +1,17 @@
 # Project Roadmap
 
-_Last updated: 24 Nov 2025 (bilingual update)_
+_Last updated: 17 Dec 2025 (payments + onboarding update)_
 
 ## Current Snapshot
 _Текущее состояние_
-- Tech stack: Vite + React 18 + TypeScript + Tailwind + shadcn/ui (`src/App.tsx`, `src/pages/*`, `src/components/*`).
-- Технологический стек: Vite + React 18 + TypeScript + Tailwind + shadcn/ui (`src/App.tsx`, `src/pages/*`, `src/components/*`).
-- UX: single-page landing that stitches together `HeroSection`, `ProgramSection`, `PricingSection`, testimonials, FAQ, CTA, plus static legal pages at `/privacy` and `/offer`.
-- UX: одностраничный лендинг с блоками `HeroSection`, `ProgramSection`, `PricingSection`, отзывами, FAQ, CTA и юридическими страницами `/privacy`, `/offer`.
-- State & data: all content is hardcoded; no CMS, backend, form handling, or analytics. Buttons scroll to sections; pricing CTA does not start purchase flow.
-- Состояние и данные: всё содержимое захардкожено; отсутствуют CMS, бэкенд, формы и аналитика. Кнопки только скроллят к блокам, CTA тарифов не запускают оплату.
-- Infra: no environment setup beyond Vite scripts; no CI/CD, testing, or monitoring.
-- Инфраструктура: кроме Vite-скриптов ничего не настроено; нет CI/CD, тестов и мониторинга.
+- Tech stack: Vite + React 18 + TypeScript + Tailwind + shadcn/ui + Express API + PostgreSQL + nodemailer (`src/*`, `server/*`).
+- Технологический стек: Vite + React 18 + TypeScript + Tailwind + shadcn/ui + Express API + PostgreSQL + nodemailer (`src/*`, `server/*`).
+- UX: single-page landing with modal checkout (name/email/phone) that redirects to YooKassa; success/fail pages wired; sections `HeroSection`, `ProgramSection`, `PricingSection`, testimonials, FAQ, CTA, legal pages `/privacy`, `/offer`.
+- UX: одностраничный лендинг с модальным чекаутом (имя/email/телефон) на YooKassa, подключены страницы успеха/ошибки; блоки `HeroSection`, `ProgramSection`, `PricingSection`, отзывы, FAQ, CTA, страницы `/privacy`, `/offer`.
+- State & data: orders/payments persisted to Postgres; webhook adds student to Skillspace, logs purchase to UDS, and emails login link; контент статический, CMS/аналитики пока нет.
+- Состояние и данные: заказы/платежи пишутся в Postgres; вебхук добавляет ученика в Skillspace, шлет покупку в UDS и письмо со входом; контент статический, CMS/аналитика отсутствуют.
+- Infra: backend relies on `.env` (YooKassa, Skillspace, SMTP, DB, UDS); CI/CD, automated tests, and monitoring still missing.
+- Инфраструктура: бэкенд использует `.env` (YooKassa, Skillspace, SMTP, БД, UDS); CI/CD, авто-тесты и мониторинг пока не настроены.
 - Business intent: sell онлайн-курс «Сила в деле» и конвертировать трафик в покупки/заявки.
 - Бизнес-цель: продавать онлайн-курс «Сила в деле» и переводить трафик в оплату/заявки.
 
@@ -68,12 +68,12 @@ _Сбор лидов и аналитика_
 
 ### M3 — Payments & onboarding (3–5 нед.)
 _Оплаты и онбординг_
-- [ ] Connect Stripe/ЮKassa checkout for three tariffs defined in `PricingSection`; replace static buttons with actual links.  
-  [ ] Подключить Stripe/ЮKassa для трёх тарифов из `PricingSection`, заменить статические кнопки реальными ссылками.
-- [ ] Build post-payment webhook handler that grants course access (e.g., add to Telegram закрытый канал via bot API).  
-  [ ] Реализовать вебхук после оплаты, который выдаёт доступ (например, добавляет в закрытый Telegram-канал).
-- [ ] Add automated email/SMS onboarding sequence (Resend + SMS provider).  
-  [ ] Настроить автоматическую цепочку email/SMS онбординга (Resend + SMS-провайдер).
+- [x] Connect Stripe/ЮKassa checkout for three tariffs defined in `PricingSection`; replace static buttons with actual links. (Done via YooKassa redirect; amounts/tariffs come from `PricingSection`, orders/payments stored in Postgres.)  
+  [x] Подключить Stripe/ЮKassa для трёх тарифов из `PricingSection`, заменить статические кнопки реальными ссылками. (Реализовано через YooKassa redirect; тарифы/суммы из `PricingSection`, заказы/платежи пишутся в Postgres.)
+- [x] Build post-payment webhook handler that grants course access (e.g., add to Telegram закрытый канал via bot API). (Webhook triggers Skillspace invite, UDS sync, and returns login link for email.)  
+  [x] Реализовать вебхук после оплаты, который выдаёт доступ (например, добавляет в закрытый Telegram-канал). (Вебхук добавляет в Skillspace, шлет покупку в UDS и возвращает ссылку входа для письма.)
+- [ ] Add automated email/SMS onboarding sequence (Resend + SMS provider). (Welcome email with Skillspace login already отправляется после оплаты; SMS и многошаговая цепочка не сделаны.)  
+  [ ] Настроить автоматическую цепочку email/SMS онбординга (Resend + SMS-провайдер). (Приветственное письмо со ссылкой на вход уже отправляется после оплаты; SMS/цепочка не реализованы.)
 - [ ] Implement dashboard page (`/dashboard`) where user can see purchase status, download materials, contact support.  
   [ ] Сделать страницу `/dashboard` с информацией о покупке, материалами и контактами саппорта.
 - [ ] Add refund automation (14-day policy) with admin review UI.  
