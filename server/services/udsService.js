@@ -6,8 +6,8 @@ dotenv.config(); // Загружаем переменные из .env
 
 // 1. НАСТРОЙКИ
 // Берем из файла .env (UDS_API_KEY), если там пусто — берем жестко прописанную строку
-const API_KEY = process.env.UDS_API_KEY || 'ZjViZDJjZTItMjg4OS00NTVjLWE0Y2UtZTJlZGI0NGRhNGNj'; 
-const COMPANY_ID = process.env.UDS_COMPANY_ID || '549756210731'; 
+const API_KEY = process.env.UDS_API_KEY; 
+const COMPANY_ID = process.env.UDS_COMPANY_ID; 
 const API_URL = 'https://api.uds.app/partner/v2';
 
 const getHeaders = () => {

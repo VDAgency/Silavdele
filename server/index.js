@@ -158,7 +158,7 @@ app.post('/api/payment/webhook', async (req, res) => {
                 // --- C. EMAIL (ПИСЬМО) ---
                 console.log('👉 3. Email...');
                 if (loginLink) {
-                    await sendWelcomeEmail(data.email, data.name, loginLink);
+                    await sendWelcomeEmail(data.email, data.name, loginLink, referrerCode);
                 } else {
                     console.error('⚠️ Письмо не отправлено: нет ссылки от Skillspace');
                 }
