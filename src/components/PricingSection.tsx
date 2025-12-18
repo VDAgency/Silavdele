@@ -23,8 +23,8 @@ const PricingSection = () => {
     {
       name: "Базовый",
       subtitle: "Для быстрого старта",
-      price: "10",
-      oldPrice: "1000",
+      price: "15 500",
+      oldPrice: "24 999",
       features: [
         "25 видеоуроков",
         "Готовые шаблоны контента",

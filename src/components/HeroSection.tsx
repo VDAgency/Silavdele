@@ -42,7 +42,7 @@ const HeroSection = () => {
                     md:top-0 md:left-[38%] md:w-16 md:h-16
                     
                     /* 3. ДЕСКТОП (lg) */
-                    lg:-top-4 lg:left-[36%] lg:w-24 lg:h-24"
+                    lg:-top-4 lg:left-[36%] lg:w-24 lg:h-24 animate-pulse"
                 />
               </span>
               <br />
