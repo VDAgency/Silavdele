@@ -150,7 +150,7 @@ const ProgramSection = () => {
                 </div>
 
                 {/* ИКОНКА (Справа) */}
-                <div className="flex-shrink-0 w-[80px] h-[80px] md:w-[100px] md:h-[100px] flex items-center justify-center">
+                <div className="flex-shrink-0 w-[80px] h-[80px] md:w-[120px] md:h-[120px] flex items-center justify-center">
                   <img 
                     src={module.img} 
                     alt={module.title}
@@ -164,7 +164,7 @@ const ProgramSection = () => {
         </div>
 
         {/* Кнопки */}
-        <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
+        <div className="flex flex-col sm:flex-row gap-4 pt-12 w-full justify-center">
           <Button 
             onClick={scrollToPricing}
             className="w-full sm:w-auto px-10 py-7 text-lg rounded-full font-bold shadow-xl shadow-primary/20"

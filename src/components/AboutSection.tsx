@@ -1,93 +1,121 @@
-import { Users, Award, BookOpen, Rocket } from "lucide-react";
+import React from "react";
+import { Quote } from "lucide-react";
 
 const AboutSection = () => {
   const stats = [
-    { icon: Users, value: "2,500+", label: "Выпускников курса" },
-    { icon: Award, value: "5 лет", label: "Опыта в Telegram" },
-    { icon: BookOpen, value: "50+", label: "Часов контента" },
-    { icon: Rocket, value: "92%", label: "Успешных запусков" }
+    {
+      icon: "/assets/about/icon-stars.png",
+      value: "15+",
+      label: "лет опыта",
+    },
+    {
+      icon: "/assets/about/icon-student.png",
+      value: "100+",
+      label: "учеников",
+    },
+    {
+      icon: "/assets/about/icon-growth.png",
+      value: "150%",
+      label: "средний рост",
+    },
+    {
+      icon: "/assets/about/icon-folder.png",
+      value: "50+",
+      label: "проектов",
+    },
   ];
 
   return (
-    <section className="py-24 md:py-32 bg-background">
-      <div className="container mx-auto px-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
-                О курсе{" "}
-                <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                  Telegram от А до Я
-                </span>
-              </h2>
+    <section id="about" className="py-20 md:py-32 bg-white overflow-hidden">
+      <div className="container mx-auto px-4 max-w-screen-xl">
+        
+        {/* --- ВЕРХНЯЯ ЧАСТЬ (ФОТО И ТЕКСТ) --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 lg:gap-12 items-start">
+          
+          {/* ЛЕВАЯ КОЛОНКА: ФОТО */}
+          <div className="relative flex justify-center lg:justify-start lg:col-span-1">
+            <img 
+               src="/assets/about/star-top.png" 
+               alt="star" 
+               className="absolute -top-8 left-[90%] w-16 md:-top-10 md:left-[85%] md:w-20 z-10 animate-pulse"
+            />
+            <img 
+              src="/assets/about/sergey-photo.png" 
+              alt="Сергей Силантьев" 
+              className="w-full h-auto object-contain"
+            />
+          </div>
+
+          {/* ПРАВАЯ КОЛОНКА: ТЕКСТ */}
+          <div className="flex flex-col justify-center lg:col-span-2 relative">
+            <img 
+               src="/assets/about/star-right.png" 
+               alt="star" 
+               className="absolute -right-4 top-0 md:-right-20 md:top-10 w-12 md:w-24 z-0 rotate-12 pointer-events-none"
+            />
+            {/* Заголовок H2 */}
+            <h2 className="font-black text-foreground mb-6 relative z-10">
+              {/* ЧАСТЬ 1: Имя (40px) */}
+              <span className="text-2xl md:text-[40px] md:leading-[35px]">
+                Сергей Силантьев
+              </span>
               
-              <div className="space-y-4 text-muted-foreground leading-relaxed">
-                <p>
-                  Мы создали первый в России комплексный курс по развитию и монетизации Telegram-каналов для экспертов, блогеров и предпринимателей.
-                </p>
-                <p>
-                  Наша команда — это эксперты с многолетним опытом запуска успешных проектов в Telegram. Мы знаем все тонкости платформы и делимся только проверенными стратегиями.
-                </p>
-                <p>
-                  За 5 лет мы помогли более 2,500 ученикам создать прибыльные каналы. Суммарный доход наших выпускников превысил 180 миллионов рублей.
-                </p>
-              </div>
+              {/* Пробел */}
+              <span> </span>
 
-              <div className="bg-primary/10 border border-primary/20 rounded-2xl p-6 space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-                    <Award className="w-6 h-6 text-primary" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-lg">Гарантия результата</div>
-                    <div className="text-sm text-muted-foreground">или вернём деньги в течение 14 дней</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                {stats.map((stat, index) => (
-                  <div
-                    key={index}
-                    className="bg-card rounded-2xl p-6 border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg space-y-3"
-                  >
-                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <stat.icon className="w-6 h-6 text-primary" />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-3xl font-bold text-primary">{stat.value}</div>
-                      <div className="text-sm text-muted-foreground leading-tight">{stat.label}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="bg-gradient-to-br from-primary/10 via-accent/10 to-primary/10 rounded-2xl p-8 space-y-4">
-                <h3 className="text-xl font-bold">Что делает нас лучшими</h3>
-                <ul className="space-y-3 text-sm text-muted-foreground">
-                  <li className="flex items-start gap-2">
-                    <span className="text-primary font-bold shrink-0">→</span>
-                    <span>Практический подход — никакой воды, только конкретные действия</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-primary font-bold shrink-0">→</span>
-                    <span>Актуальные стратегии 2024 года — работают здесь и сейчас</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-primary font-bold shrink-0">→</span>
-                    <span>Постоянная поддержка — не оставим вас один на один с вопросами</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-primary font-bold shrink-0">→</span>
-                    <span>Реальные кейсы — учитесь на примерах успешных учеников</span>
-                  </li>
-                </ul>
-              </div>
+              {/* ЧАСТЬ 2: Описание (30px) */}
+              <span className="text-lg md:text-[30px] md:leading-[35px]">
+                – эксперт по цифровому маркетингу, интеллект-тренер, коуч и наставник предпринимателей, спикер на профильных площадках.
+                <br className="block mt-2" />
+                Основатель онлайн-школы <span className="text-[#0088CC]">«Сила в Деле».</span>
+              </span>
+            </h2>
+            <p className="text-base md:text-lg text-muted-foreground mb-8 leading-relaxed relative z-10">
+              Более 15 лет в digital-маркетинге. Помог сотням предпринимателей выстроить стратегии онлайн-присутствия и масштабировать бизнес через соцсети и мессенджеры. Видит тренды и мгновенно реагирует на изменения с точностью снайпера.
+            </p>
+            <div className="relative bg-[#0088CC]/10 rounded-2xl p-6 md:p-4 border-l-4 border-[#0088CC] z-10">
+              <Quote className="absolute top-4 right-4 w-8 h-8 text-[#0088CC]/20" />
+              <p className="text-sm md:text-lg font-medium text-foreground italic relative z-10">
+                «Telegram — это не просто мессенджер. Это целая экосистема для бизнеса, где каждый может найти свою аудиторию и построить прибыльный канал коммуникации. Главное — знать, как.»
+              </p>
             </div>
           </div>
         </div>
+
+        {/* --- НИЖНИЙ РЯД: СТАТИСТИКА (ИСПРАВЛЕНО) --- */}
+        {/* mt-32: Большой отступ сверху, чтобы иконки не наезжали на текст выше */}
+        <div className="mt-32">
+          {/* overflow-visible: Важно! Чтобы иконки, торчащие сверху, не обрезались */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-16 md:gap-8 overflow-visible">
+            {stats.map((stat, index) => (
+              <div 
+                key={index} 
+                className="relative flex flex-col items-center justify-center p-6 pt-12 border-2 border-[#0088CC] rounded-[30px] bg-white text-center hover:shadow-lg transition-shadow duration-300"
+              >
+                
+                {/* --- ИКОНКА НА ГРАНИЦЕ --- */}
+                {/* absolute: вырываем из потока */}
+                {/* top-0: ставим на верхнюю линию */}
+                {/* left-1/2 -translate-x-1/2: центрируем по горизонтали */}
+                {/* -translate-y-1/2: поднимаем вверх на 50% высоты (сажаем на линию) */}
+                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white px-2">
+                   {/* w-16 h-16: Задаем размер иконки (можно менять на w-20 h-20) */}
+                   <img src={stat.icon} alt={stat.label} className="w-16 h-16 md:w-20 md:h-20 object-contain" />
+                </div>
+
+                {/* Цифра */}
+                <div className="text-3xl md:text-4xl font-black text-foreground mb-1">
+                  {stat.value}
+                </div>
+                {/* Подпись */}
+                <div className="text-sm md:text-base font-medium text-muted-foreground">
+                  {stat.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
       </div>
     </section>
   );

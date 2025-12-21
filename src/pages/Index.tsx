@@ -16,9 +16,9 @@ const Index = () => {
       <HeroSection />
       <WhyTelegramSection />
       <ProgramSection />
+      <AboutSection />
       <PricingSection />
       <TestimonialsSection />
-      <AboutSection />
       <FAQSection />
       <CTASection />
       <Footer />
