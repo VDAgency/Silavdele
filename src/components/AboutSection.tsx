@@ -51,7 +51,7 @@ const AboutSection = () => {
             <img 
                src="/assets/about/star-right.png" 
                alt="star" 
-               className="absolute -right-4 top-0 md:-right-20 md:top-10 w-12 md:w-24 z-0 rotate-12 pointer-events-none"
+               className="absolute -right-8 top-20 md:right-2 md:top-20 w-20 md:w-40 z-0 pointer-events-none"
             />
             {/* Заголовок H2 */}
             <h2 className="font-black text-foreground mb-6 relative z-10">

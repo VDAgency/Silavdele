@@ -5,6 +5,7 @@ import ProgramSection from "@/components/ProgramSection";
 import PricingSection from "@/components/PricingSection";
 import TestimonialsSection from "@/components/TestimonialsSection";
 import AboutSection from "@/components/AboutSection";
+import BonusSection from "@/components/BonusSection";
 import FAQSection from "@/components/FAQSection";
 import CTASection from "@/components/CTASection";
 import Footer from "@/components/Footer";
@@ -17,6 +18,7 @@ const Index = () => {
       <WhyTelegramSection />
       <ProgramSection />
       <AboutSection />
+      <BonusSection />
       <PricingSection />
       <TestimonialsSection />
       <FAQSection />
