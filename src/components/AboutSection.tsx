@@ -10,7 +10,7 @@ const AboutSection = () => {
     },
     {
       icon: "/assets/about/icon-student.png",
-      value: "100+",
+      value: "1000+",
       label: "учеников",
     },
     {
@@ -51,7 +51,7 @@ const AboutSection = () => {
             <img 
                src="/assets/about/star-right.png" 
                alt="star" 
-               className="absolute -right-8 top-20 md:right-2 md:top-20 w-20 md:w-40 z-0 pointer-events-none"
+               className="absolute -right-4 top-28 md:-right-12 md:top-40 w-20 md:w-40 z-0 pointer-events-none"
             />
             {/* Заголовок H2 */}
             <h2 className="font-black text-foreground mb-6 relative z-10">
@@ -65,7 +65,7 @@ const AboutSection = () => {
 
               {/* ЧАСТЬ 2: Описание (30px) */}
               <span className="text-lg md:text-[30px] md:leading-[35px]">
-                – эксперт по цифровому маркетингу, интеллект-тренер, коуч и наставник предпринимателей, спикер на профильных площадках.
+                – автор курса, эксперт по цифровому маркетингу, интеллект-тренер, коуч и наставник предпринимателей, спикер на профильных площадках.
                 <br className="block mt-2" />
                 Основатель онлайн-школы <span className="text-[#0088CC]">«Сила в Деле».</span>
               </span>
