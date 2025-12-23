@@ -10,6 +10,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import PublicOffer from "./pages/PublicOffer";
 import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentFailed from './pages/PaymentFailed';
+import Dashboard from "./pages/Dashboard";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +45,9 @@ const App = () => (
         
         <Routes>
           <Route path="/" element={<Index />} />
+
+          {/* ЗАЩИЩЕННЫЙ РОУТ */}
+          <Route path="/dashboard" element={<Dashboard />} />
 
           {/* Новые страницы */}
           <Route path="/privacy" element={<PrivacyPolicy />} />

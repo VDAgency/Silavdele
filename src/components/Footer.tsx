@@ -22,7 +22,7 @@ const Footer = () => {
 
         {/* Правый блок — данные исполнителя */}
         <div className="text-center md:text-right leading-relaxed">
-          <p>Силантьев Сергей Александрович</p>
+          <p>ИП Силантьев Сергей Александрович</p>
           <p>ИНН: 250816422607</p>
           <p>Email: <a href="mailto:silavdele@mail.ru" className="hover:text-black transition">silavdele@mail.ru</a></p>
         </div>

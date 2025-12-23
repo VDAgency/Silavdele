@@ -1,4 +1,3 @@
-// AuthModal.tsx
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -6,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Eye, EyeOff } from "lucide-react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom"; // Добавили для перехода
 
 // Тип для режима окна: вход или регистрация
 type AuthMode = "login" | "register";
@@ -20,6 +20,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalP
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate(); // Хук для навигации
 
   // Данные формы
   const [formData, setFormData] = useState({
@@ -29,11 +30,12 @@ export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalP
     password: "",
   });
 
-  // Сбрасываем режим при открытии окна
+  // Сбрасываем режим и данные при открытии окна
   useEffect(() => {
     if (isOpen) {
       setMode(initialMode);
       setFormData({ name: "", phone: "", email: "", password: "" });
+      setLoading(false);
     }
   }, [isOpen, initialMode]);
 
@@ -42,36 +44,54 @@ export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalP
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Обработчик отправки
+  // Обработчик отправки (ГЛАВНАЯ ЛОГИКА)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
+      // 1. Определяем адрес и данные
+      const url = mode === "login" ? "/api/auth/login" : "/api/auth/register";
+      
+      let payload: any = {
+        email: formData.email,
+        password: formData.password
+      };
+
+      // Если регистрация - добавляем имя, телефон и реферальный код
       if (mode === "register") {
-        // --- ЛОГИКА РЕГИСТРАЦИИ ---
-        console.log("Регистрация:", formData);
-        
-        // TODO: Здесь будет запрос к бекенду
-        // await axios.post('/api/auth/register', formData);
-        
-        alert("Регистрация пока в разработке (Фронтенд готов!)");
-      } else {
-        // --- ЛОГИКА ВХОДА ---
-        console.log("Вход:", { email: formData.email, password: formData.password });
-        
-        // TODO: Здесь будет запрос к бекенду
-        // await axios.post('/api/auth/login', { email: formData.email, password: formData.password });
-        
-        alert("Вход пока в разработке (Фронтенд готов!)");
+        const referrerCode = localStorage.getItem("uds_ref_code"); // Достаем код из памяти
+        payload = {
+          ...payload,
+          name: formData.name,
+          phone: formData.phone,
+          referrer_code: referrerCode || null
+        };
       }
-      
-      // Если успех - закрываем окно и переадресуем в ЛК
-      // onClose();
-      
-    } catch (error) {
+
+      // 2. Отправляем запрос на сервер
+      const response = await axios.post(url, payload);
+
+      // 3. Если успех
+      const { token, user } = response.data;
+
+      // Сохраняем токен в браузере
+      localStorage.setItem("auth_token", token);
+      localStorage.setItem("user_data", JSON.stringify(user));
+
+      console.log("Успешная авторизация:", user.name);
+
+      // Закрываем окно
+      onClose();
+
+      // Переходим в личный кабинет
+      navigate("/dashboard");
+
+    } catch (error: any) {
       console.error("Ошибка авторизации:", error);
-      alert("Ошибка: что-то пошло не так");
+      // Выводим сообщение от сервера или общее
+      const message = error.response?.data?.error || "Произошла ошибка. Проверьте данные.";
+      alert(message);
     } finally {
       setLoading(false);
     }
