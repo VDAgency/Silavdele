@@ -1,4 +1,6 @@
 // server/services/dbService.js
+import { addUserToCourse } from './skillspaceService.js';
+import { sendWelcomeEmail } from './emailService.js';
 import dotenv from 'dotenv';
 dotenv.config(); 
 import pool from '../db.js';
@@ -40,16 +42,46 @@ export const findOrCreateUser = async (email, phone, name, referrerCode = null) 
     return createRes.rows[0];
 };
 
-// 2. Регистрация (Создание пароля для ЛК)
+// 2. Регистрация (Обновленная: Умное слияние)
 export const registerUser = async (email, phone, name, password, referrerCode) => {
-    // Используем функцию выше, чтобы не дублировать логику создания
-    let user = await findOrCreateUser(email, phone, name, referrerCode);
-    
-    // Хешируем пароль
+    // 1. Ищем пользователя по телефону
+    const existingUserRes = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
+    let user = existingUserRes.rows[0];
+
+    // Сценарий А: Пользователя вообще нет -> Создаем с нуля
+    if (!user) {
+        user = await findOrCreateUser(email, phone, name, referrerCode);
+    }
+
+    // Сценарий Б: Пользователь есть (пришел из UDS без почты), и он регистрируется на сайте
+    // Признак: у него в базе email-заглушка, а сейчас он ввел нормальный email
+    if (user && user.email.includes('@silavdele.temp') && !email.includes('@silavdele.temp')) {
+        console.log(`🔄 Апгрейд пользователя ${phone}: Замена ${user.email} на ${email}`);
+        
+        // Обновляем Email в базе
+        await pool.query('UPDATE users SET email = $1 WHERE id = $2', [email, user.id]);
+        user.email = email; // Обновляем объект в памяти
+
+        // ПРОВЕРКА: Если у него уже были оплаченные заказы ("висящие"), выдаем доступ
+        const paidOrders = await pool.query("SELECT tariff_code FROM orders WHERE user_id = $1 AND status = 'paid'", [user.id]);
+        
+        if (paidOrders.rows.length > 0) {
+            console.log(`🎉 Нашли старые покупки! Выдаем доступ в Skillspace...`);
+            // Берем последний тариф (или можно циклом все, если их много)
+            const tariff = paidOrders.rows[0].tariff_code; 
+            
+            // Регистрируем в школе
+            const loginLink = await addUserToCourse(email, name, phone, tariff);
+            
+            // Шлем письмо
+            await sendWelcomeEmail(email, name, loginLink, user.referrer_code);
+        }
+    }
+
+    // 2. Хешируем пароль и сохраняем имя
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
 
-    // Обновляем запись, добавляя пароль
     const updateRes = await pool.query(
         'UPDATE users SET password_hash = $1, name = $2 WHERE id = $3 RETURNING *',
         [hash, name, user.id]

@@ -1,3 +1,4 @@
+// server/index.js
 import dotenv from 'dotenv';
 dotenv.config();
 import express from 'express';
@@ -85,7 +86,7 @@ app.get('/api/dashboard', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 2. ОПЛАТА (PAYMENT)
+// 2. ОПЛАТА (PAYMENT) - ЮКасса
 // ==========================================
 
 // Создание платежа
@@ -152,7 +153,7 @@ app.post('/api/payment/create', async (req, res) => {
     }
 });
 
-// Вебхук (Главная логика после оплаты)
+// Вебхук ЮКассы (Главная логика после оплаты на сайте)
 app.post('/api/payment/webhook', async (req, res) => {
     try {
         const { event, object } = req.body;
@@ -167,7 +168,7 @@ app.post('/api/payment/webhook', async (req, res) => {
         const metaOrderId = object.metadata?.order_id;
         const referrerCode = object.metadata?.referrer_code;
 
-        console.log(`💰 Webhook: Оплата прошла! ID: ${metaOrderId}, Ref: ${referrerCode}`);
+        console.log(`💰 Webhook ЮКасса: Оплата прошла! ID: ${metaOrderId}`);
 
         // 1. Обновляем статус заказа в БД
         const orderId = await updateOrderStatus(yookassaId, status, metaOrderId);
@@ -182,10 +183,9 @@ app.post('/api/payment/webhook', async (req, res) => {
 
             if (orderRes.rows.length > 0) {
                 const data = orderRes.rows[0];
-                console.log(`🚀 Начинаем обработку для: ${data.email}`);
+                console.log(`🚀 Обработка для: ${data.email}`);
 
                 // --- A. SKILLSPACE ---
-                console.log('👉 1. Skillspace...');
                 let loginLink = null;
                 try {
                     loginLink = await addUserToCourse(data.email, data.name, data.phone, data.tariff_code);
@@ -195,14 +195,12 @@ app.post('/api/payment/webhook', async (req, res) => {
                 }
 
                 // --- B. UDS ---
-                console.log('👉 2. UDS...');
                 sendUdsPurchase(data.phone, amountVal, referrerCode)
                     .then(async (res) => {
                         if (res.success) {
                             console.log('✅ UDS Sync Complete');
                             if (res.udsClientId) {
                                 await updateUserExternalIds(data.user_id, null, res.udsClientId);
-                                console.log('💾 UDS ID клиента сохранен в базу.');
                             }
                         }
                     })
@@ -211,20 +209,18 @@ app.post('/api/payment/webhook', async (req, res) => {
                     });
                 
                 // --- C. EMAIL ---
-                console.log('👉 3. Email...');
                 if (loginLink) {
                     await sendWelcomeEmail(data.email, data.name, loginLink, referrerCode);
                 }
 
-                // --- D. НАЧИСЛЕНИЕ КОМИССИЙ (НОВОЕ) ---
-                console.log('👉 4. Финансы...');
+                // --- D. НАЧИСЛЕНИЕ КОМИССИЙ ---
                 await processCommissions(orderId, data.user_id, amountVal);
             }
         }
 
         res.status(200).send('OK');
     } catch (error) {
-        console.error('❌ Критическая ошибка вебхука:', error);
+        console.error('❌ Критическая ошибка вебхука ЮКассы:', error);
         res.status(500).send('Error');
     }
 });
@@ -242,6 +238,103 @@ app.get('/api/payment/check/:orderId', async (req, res) => {
     } catch (error) {
         console.error('Ошибка проверки:', error);
         res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// ==========================================
+// 3. ВЕБХУКИ UDS (Входящие данные)
+// ==========================================
+
+// А. Новая операция (Оплата в UDS на кассе или в приложении)
+app.post('/api/webhooks/uds/operation', async (req, res) => {
+    try {
+        // UDS присылает данные о покупке
+        const { action, customer, total } = req.body;
+        
+        // Нам интересны только покупки (PURCHASE) на сумму больше 0
+        if (action === 'PURCHASE' && total > 0 && customer) {
+            console.log(`💎 UDS Webhook: Операция на сумму ${total}`);
+
+            const phone = customer.phone;
+            const email = customer.email; 
+            const name = customer.displayName || 'Ученик из UDS';
+            const uid = customer.uid;
+
+            if (phone) {
+                // Очистка телефона
+                let cleanedPhone = phone.replace(/[^\d+]/g, '');
+                if (cleanedPhone.startsWith('8')) cleanedPhone = '+7' + cleanedPhone.slice(1);
+                if (cleanedPhone.startsWith('7') && !cleanedPhone.startsWith('+7')) cleanedPhone = '+' + cleanedPhone;
+
+                // 1. Ищем или создаем юзера в нашей базе
+                // Если email нет, создаем временный (чтобы база пропустила)
+                const userEmail = email || `no-email-${cleanedPhone.replace('+', '')}@silavdele.temp`;
+                
+                const user = await findOrCreateUser(userEmail, cleanedPhone, name);
+                
+                // Сохраняем UDS ID, раз он пришел
+                if (uid) {
+                    await updateUserExternalIds(user.id, null, uid);
+                }
+
+                // 2. Создаем заказ в нашей базе (чтобы видеть в статистике)
+                const order = await createOrder(user.id, total, 'uds_purchase');
+                // Сразу помечаем как оплаченный, так как это данные по факту оплаты
+                await pool.query('UPDATE orders SET status = $1 WHERE id = $2', ['paid', order.id]);
+
+                // 3. Если есть Email — выдаем доступ к курсу и шлем письмо
+                if (email) {
+                    console.log(`🚀 Выдаем доступ для ${email} (источник: UDS)`);
+                    
+                    // Skillspace
+                    const loginLink = await addUserToCourse(email, name, cleanedPhone, "Базовый (UDS)");
+                    
+                    // Письмо
+                    await sendWelcomeEmail(email, name, loginLink, user.referrer_code);
+                } else {
+                    console.log('⚠️ Email не указан в UDS. Доступ к Skillspace выдать нельзя.');
+                }
+
+                // 4. Начисляем комиссии (если у этого юзера есть реферер)
+                await processCommissions(order.id, user.id, total);
+            }
+        }
+
+        res.status(200).send('OK');
+    } catch (e) {
+        console.error('❌ Ошибка вебхука UDS Operation:', e);
+        // Отвечаем 200, чтобы UDS не слал повторы бесконечно, даже если у нас ошибка
+        res.status(200).send('Error processed');
+    }
+});
+
+// Б. Новый клиент (Вступил в компанию через приложение)
+app.post('/api/webhooks/uds/client', async (req, res) => {
+    try {
+        const { uid, phone, email, displayName } = req.body;
+        
+        console.log(`👤 UDS Webhook: Новый клиент ${displayName}`);
+
+        if (phone) {
+            let cleanedPhone = phone.replace(/[^\d+]/g, '');
+            if (cleanedPhone.startsWith('8')) cleanedPhone = '+7' + cleanedPhone.slice(1);
+            if (cleanedPhone.startsWith('7') && !cleanedPhone.startsWith('+7')) cleanedPhone = '+' + cleanedPhone;
+            
+            const userEmail = email || `no-email-${cleanedPhone.replace('+', '')}@silavdele.temp`;
+
+            // Просто сохраняем в базу, чтобы он у нас был
+            const user = await findOrCreateUser(userEmail, cleanedPhone, displayName);
+            
+            // Сохраняем связь с UDS
+            if (uid) {
+                await updateUserExternalIds(user.id, null, uid);
+            }
+        }
+
+        res.status(200).send('OK');
+    } catch (e) {
+        console.error('❌ Ошибка вебхука UDS Client:', e);
+        res.status(200).send('Error processed');
     }
 });
 
