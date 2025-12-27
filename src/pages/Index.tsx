@@ -3,7 +3,10 @@ import HeroSection from "@/components/HeroSection";
 import WhyTelegramSection from "@/components/WhyTelegramSection";
 import ProgramSection from "@/components/ProgramSection";
 import PricingSection from "@/components/PricingSection";
-import TestimonialsSection from "@/components/TestimonialsSection";
+import TechSection from "@/components/TechSection";
+import ChooseUsSection from "@/components/ChooseUsSection";
+import ResultsSection from "@/components/ResultsSection";
+// import TestimonialsSection from "@/components/TestimonialsSection";
 import AboutSection from "@/components/AboutSection";
 import BonusSection from "@/components/BonusSection";
 import FAQSection from "@/components/FAQSection";
@@ -20,7 +23,10 @@ const Index = () => {
       <AboutSection />
       <BonusSection />
       <PricingSection />
-      <TestimonialsSection />
+      <TechSection />
+      <ChooseUsSection />
+      <ResultsSection />
+      { /* <TestimonialsSection /> */}
       <FAQSection />
       <CTASection />
       <Footer />

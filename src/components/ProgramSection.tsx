@@ -81,13 +81,15 @@ const ProgramSection = () => {
     <section id="program" className="relative py-20 md:py-32 overflow-hidden bg-white">
       
       {/* ФОНОВЫЙ ПАТТЕРН */}
-      <div className="absolute inset-0 w-full h-full z-0 opacity-40 pointer-events-none">
-          <img 
-            src="/assets/program/bg-pattern.png" 
-            alt="bg" 
-            className="w-full h-full object-cover"
-          />
-      </div>
+      <div 
+        className="absolute inset-0 z-0 pointer-events-none opacity-90"
+        style={{
+          backgroundImage: 'url("/assets/program/bg-pattern.png")',
+          backgroundRepeat: 'repeat', // Заставляет картинку повторяться, а не растягиваться
+          backgroundSize: '800px',    // Размер одной ячейки паттерна (регулируй это!)
+          backgroundPosition: 'center top'
+        }}
+      />
 
       <div className="container mx-auto px-4 relative z-10 max-w-7xl">
         

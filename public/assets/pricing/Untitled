@@ -126,16 +126,10 @@ const PricingSection = () => {
   return (
     <section id="pricing" className="relative py-24 md:py-32 bg-white overflow-visible">
       
-      {/* ПАТТЕРН НА ФОНЕ (Новый вариант: Тайлинг) */}
-      <div 
-        className="absolute inset-0 z-0 pointer-events-none opacity-90"
-        style={{
-          backgroundImage: 'url("/assets/program/bg-pattern.png")',
-          backgroundRepeat: 'repeat', // Заставляет картинку повторяться, а не растягиваться
-          backgroundSize: '800px',    // Размер одной ячейки паттерна (регулируй это!)
-          backgroundPosition: 'center top'
-        }}
-      />
+      {/* ПАТТЕРН НА ФОНЕ (Как в секции программы) */}
+      <div className="absolute inset-0 z-0 opacity-30 pointer-events-none">
+         <img src="/assets/program/bg-pattern.png" alt="bg" className="w-full h-full object-cover" />
+      </div>
       
       <div className="container mx-auto px-4 relative z-10 max-w-7xl">
         
@@ -178,20 +172,20 @@ const PricingSection = () => {
                 )}
 
                 {/* --- 2. УГЛОВАЯ ЛЕНТА (Скидка) --- */}
-                <div className="absolute top-0 right-0 z-20 w-[150px] h-[150px] rounded-tr-[30px] pointer-events-none">
+                <div className="absolute top-0 right-0 z-10 overflow-hidden w-[150px] h-[150px] rounded-tr-[30px] pointer-events-none">
                    {/* Картинка ленты */}
                    <img 
                      src={plan.cornerImage} 
                      alt="discount" 
-                     className={`absolute -top-1 -right-1 ${isBlue ? 'w-[120px]' : 'w-[100px]'}`} 
+                     className={`absolute top-0 right-0 ${isBlue ? 'w-[120px]' : 'w-[100px]'}`} 
                    />
                    
                    {/* Текст на ленте (поворачиваем и позиционируем) */}
                    <span 
                      className={`absolute font-bold text-foreground rotate-45 transform origin-center text-center
                         ${isBlue 
-                           ? 'top-[35px] -right-[20px] text-sm w-[120px]' // Для большой ленты
-                           : 'top-[28px] right-[-16px] text-[12px] w-[100px]' // Для маленькой ленты
+                           ? 'top-[35px] right-[5px] text-sm w-[120px]' // Для большой ленты
+                           : 'top-[22px] right-[-8px] text-[10px] w-[100px]' // Для маленькой ленты
                         }
                      `}
                    >
@@ -257,6 +251,12 @@ const PricingSection = () => {
           })}
         </div>
 
+        {/* Футер секции */}
+        <div className="mt-20 text-center space-y-4">
+          <h3 className="text-2xl md:text-4xl font-black text-foreground">
+            Технологии будущего уже здесь!
+          </h3>
+        </div>
       </div>
 
       {/* --- МОДАЛЬНОЕ ОКНО (Без изменений) --- */}
