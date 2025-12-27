@@ -1,3 +1,4 @@
+// navbar.tsx
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { User, Menu, X, LogIn } from "lucide-react"; 
@@ -46,7 +47,19 @@ const Navbar = () => {
           isVisible ? "translate-y-0" : "-translate-y-full"
         }`}
       >
-        <div className="container mx-auto px-4 max-w-screen-xl h-20 md:h-24 flex items-center justify-between relative">
+        {/* === НОВОГОДНЯЯ ГИРЛЯНДА === */}
+        {/* pointer-events-none: чтобы сквозь неё можно было кликать на меню */}
+        <div className="absolute top-0 left-0 w-full h-[60px] md:h-[170px] overflow-hidden pointer-events-none z-50">
+           <img 
+             src="/assets/decoration/garland.png" 
+             alt="New Year Garland" 
+             className="w-full h-full object-cover object-top md:object-fill"
+             // Если на мобилке лампочки слишком мелкие, можно заменить object-cover на:
+             // className="h-full w-auto min-w-[150%] max-w-none absolute left-1/2 -translate-x-1/2 top-0"
+           />
+        </div>
+
+        <div className="container mx-auto px-4 max-w-screen-xl h-20 md:h-52 md:pt-20 flex items-center justify-between relative">
           
           {/* 1. ЛОГОТИП */}
           <div 
@@ -56,7 +69,7 @@ const Navbar = () => {
             <img 
               src="/images/logo.svg" 
               alt="Сила в деле" 
-              className="h-16 md:h-18 w-auto object-contain" 
+              className="h-16 md:h-40 w-auto object-contain" 
             />
           </div>
 
