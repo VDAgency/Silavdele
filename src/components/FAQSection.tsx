@@ -42,53 +42,77 @@ const FAQSection = () => {
   ];
 
   return (
-    <section className="py-24 md:py-32 bg-muted/30">
-      <div className="container mx-auto px-4">
-        <div className="max-w-3xl mx-auto text-center mb-16 space-y-4">
-          <h2 className="text-4xl md:text-6xl font-bold tracking-tight">
-            Часто задаваемые{" "}
-            <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              вопросы
-            </span>
-          </h2>
-          <p className="text-xl text-muted-foreground">
+    <section className="py-20 md:py-32 bg-white overflow-hidden" id="faq">
+      {/* 1. РАСШИРЯЕМ ОБЩИЙ КОНТЕЙНЕР: max-w-4xl -> max-w-7xl */}
+      <div className="container mx-auto px-4 max-w-7xl">
+        
+        {/* --- ЗАГОЛОВОК --- */}
+        <div className="text-center mb-16 relative">
+          <div className="relative inline-block">
+            <h2 className="text-3xl md:text-[50px] leading-[1.2] font-black text-foreground relative z-10">
+              Часто задаваемые{" "}
+              <span className="text-[#0088CC] pb-1">
+                вопросы
+              </span>
+            </h2>
+            
+            <img 
+              src="/assets/faq/star-left.png" 
+              alt="Star"
+              className="absolute -left-6 -top-8 w-16 
+                         md:-left-48 md:-top-6 md:w-48
+                         z-0 animate-pulse"
+            />
+            
+            <img 
+              src="/assets/faq/star-right.png" 
+              alt="Star"
+              className="absolute -right-4 bottom-0 w-12
+                         md:-right-28 md:-bottom-14 md:w-28 z-0"
+            />
+          </div>
+          
+          <p className="mt-6 text-base md:text-lg text-muted-foreground font-medium">
             Ответы на главные вопросы о курсе
           </p>
         </div>
 
-        <div className="max-w-3xl mx-auto">
+        {/* --- АККОРДЕОН --- */}
+        {/* 2. РАСШИРЯЕМ СПИСОК ВОПРОСОВ: max-w-3xl -> max-w-5xl */}
+        <div className="max-w-5xl mx-auto">
           <Accordion type="single" collapsible className="space-y-4">
             {faqs.map((faq, index) => (
               <AccordionItem
                 key={index}
                 value={`item-${index}`}
-                className="bg-card border border-border rounded-2xl px-6 hover:border-primary/50 transition-colors duration-300"
+                className="bg-white border border-gray-100 rounded-[20px] px-6 py-2 shadow-sm hover:shadow-md hover:border-[#0088CC]/30 transition-all duration-300"
               >
-                <AccordionTrigger className="text-left font-semibold text-lg py-6 hover:no-underline">
+                <AccordionTrigger className="text-left font-bold text-lg md:text-xl py-5 hover:no-underline text-foreground">
                   {faq.question}
                 </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground leading-relaxed pb-6">
+                <AccordionContent className="text-base md:text-lg text-muted-foreground leading-relaxed pb-6 pr-4">
                   {faq.answer}
                 </AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
 
-          <div className="mt-12 text-center space-y-4">
-            <p className="text-muted-foreground">
-              Остались вопросы? Напишите нам в поддержку
+          <div className="mt-16 text-center">
+            <p className="text-lg font-bold text-foreground mb-4">
+              Остались вопросы?
             </p>
-            <div className="flex flex-wrap justify-center gap-4 text-sm">
-              <a href="mailto:support@telegram-course.ru" className="text-primary hover:underline">
-                support@telegram-course.ru
+            <div className="flex flex-col sm:flex-row justify-center gap-4 text-base font-medium">
+              <a href="mailto:support@silavdele.ru" className="text-[#0088CC] hover:text-[#006699] transition-colors">
+                support@silavdele.ru
               </a>
-              <span className="text-muted-foreground">•</span>
-              <a href="https://t.me/support" className="text-primary hover:underline">
-                @support в Telegram
+              <span className="hidden sm:inline text-gray-300">•</span>
+              <a href="https://t.me/silavdele_support" target="_blank" rel="noreferrer" className="text-[#0088CC] hover:text-[#006699] transition-colors">
+                @silavdele_support
               </a>
             </div>
           </div>
         </div>
+
       </div>
     </section>
   );
