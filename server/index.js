@@ -18,12 +18,16 @@ import {
     registerUser, 
     loginUser, 
     processCommissions, 
-    getUserDashboard 
+    getUserDashboard,
+    getUserStructureTree,
+    searchUsers,
+    getAllUsersList
 } from './services/dbService.js';
 import { addUserToCourse } from './services/skillspaceService.js';
 import { sendWelcomeEmail } from './services/emailService.js';
 import { sendUdsPurchase } from './services/udsService.js';
-import { verifyToken } from './middleware/authMiddleware.js';
+import { syncAllCustomersFromUds, syncUserStructureFromUds } from './services/udsSyncService.js';
+import { verifyToken, requireAdmin } from './middleware/authMiddleware.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -77,7 +81,17 @@ app.post('/api/auth/login', async (req, res) => {
 // Данные Личного Кабинета (Защищено)
 app.get('/api/dashboard', verifyToken, async (req, res) => {
     try {
-        const data = await getUserDashboard(req.user.id);
+        // Проверяем, является ли пользователь админом и передан ли targetUserId
+        const targetUserId = req.query.targetUserId ? parseInt(req.query.targetUserId) : null;
+        
+        // Получаем роль текущего пользователя
+        const currentUserRes = await pool.query('SELECT role FROM users WHERE id = $1', [req.user.id]);
+        const isAdmin = currentUserRes.rows[0]?.role === 'admin';
+        
+        // Если админ и передан targetUserId, используем его, иначе используем ID текущего пользователя
+        const userId = (isAdmin && targetUserId) ? targetUserId : req.user.id;
+        
+        const data = await getUserDashboard(req.user.id, userId);
         res.json(data);
     } catch (e) {
         console.error('Ошибка дашборда:', e);
@@ -335,6 +349,115 @@ app.post('/api/webhooks/uds/client', async (req, res) => {
     } catch (e) {
         console.error('❌ Ошибка вебхука UDS Client:', e);
         res.status(200).send('Error processed');
+    }
+});
+
+// ==========================================
+// 4. АДМИНСКИЕ ENDPOINTS
+// ==========================================
+
+// Поиск пользователей (только для админов)
+app.get('/api/admin/users/search', verifyToken, requireAdmin, async (req, res) => {
+    try {
+        const { query, limit } = req.query;
+        
+        if (!query) {
+            return res.status(400).json({ error: 'Параметр query обязателен' });
+        }
+
+        const users = await searchUsers(query, parseInt(limit) || 50);
+        res.json({ users });
+    } catch (e) {
+        console.error('Ошибка поиска пользователей:', e);
+        res.status(500).json({ error: 'Ошибка поиска пользователей' });
+    }
+});
+
+// Список всех пользователей с пагинацией (только для админов)
+app.get('/api/admin/users/list', verifyToken, requireAdmin, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 50;
+
+        const result = await getAllUsersList(page, limit);
+        res.json(result);
+    } catch (e) {
+        console.error('Ошибка получения списка пользователей:', e);
+        res.status(500).json({ error: 'Ошибка получения списка пользователей' });
+    }
+});
+
+// Структура пользователя (только для админов)
+app.get('/api/admin/users/:userId/structure', verifyToken, requireAdmin, async (req, res) => {
+    try {
+        const userId = parseInt(req.params.userId);
+        const syncFromUds = req.query.syncFromUds === 'true';
+
+        if (isNaN(userId)) {
+            return res.status(400).json({ error: 'Некорректный ID пользователя' });
+        }
+
+        const structure = await getUserStructureTree(userId, syncFromUds);
+        res.json(structure);
+    } catch (e) {
+        console.error('Ошибка получения структуры пользователя:', e);
+        res.status(500).json({ error: 'Ошибка получения структуры пользователя' });
+    }
+});
+
+// Синхронизация с UDS (только для админов)
+app.post('/api/admin/sync-uds', verifyToken, requireAdmin, async (req, res) => {
+    try {
+        const { type, userId } = req.body;
+
+        if (type === 'full') {
+            // Полная синхронизация всех клиентов
+            const result = await syncAllCustomersFromUds();
+            res.json({ 
+                success: true, 
+                message: 'Синхронизация запущена',
+                syncLogId: result.syncLogId,
+                customersSynced: result.customersSynced,
+                errorsCount: result.errorsCount
+            });
+        } else if (type === 'user' && userId) {
+            // Синхронизация структуры конкретного пользователя
+            const result = await syncUserStructureFromUds(userId);
+            res.json({ 
+                success: true, 
+                message: 'Синхронизация структуры пользователя завершена',
+                synced: result.synced
+            });
+        } else {
+            res.status(400).json({ error: 'Некорректные параметры. Используйте type: "full" или type: "user" с userId' });
+        }
+    } catch (e) {
+        console.error('Ошибка синхронизации с UDS:', e);
+        res.status(500).json({ error: 'Ошибка синхронизации с UDS' });
+    }
+});
+
+// ==========================================
+// 5. ПОЛЬЗОВАТЕЛЬСКИЕ ENDPOINTS
+// ==========================================
+
+// Обновление структуры пользователя из UDS (для обычных пользователей)
+app.post('/api/user/sync-structure', verifyToken, async (req, res) => {
+    try {
+        const result = await syncUserStructureFromUds(req.user.id);
+        
+        // Получаем обновленную структуру
+        const structure = await getUserStructureTree(req.user.id, false);
+        
+        res.json({ 
+            success: true, 
+            message: 'Структура обновлена',
+            synced: result.synced,
+            structure
+        });
+    } catch (e) {
+        console.error('Ошибка синхронизации структуры:', e);
+        res.status(500).json({ error: 'Ошибка синхронизации структуры' });
     }
 });
 

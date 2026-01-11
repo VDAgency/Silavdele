@@ -1,4 +1,6 @@
 -- Очистка старых таблиц (порядок важен из-за связей)
+DROP TABLE IF EXISTS uds_sync_log;
+DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS webhooks_log;
 DROP TABLE IF EXISTS platform_sync;
 DROP TABLE IF EXISTS payments;
@@ -11,6 +13,10 @@ CREATE TABLE users (
     email VARCHAR(255) UNIQUE NOT NULL,
     phone VARCHAR(32) UNIQUE,          -- Телефон, критически важен для UDS
     name VARCHAR(255),
+    password_hash VARCHAR(255),        -- Хеш пароля для входа в ЛК
+    
+    -- Роли и права
+    role VARCHAR(20) DEFAULT 'user',   -- 'user' или 'admin'
     
     -- Интеграции
     uds_id VARCHAR(100),               -- ID клиента внутри UDS (uid)
@@ -21,12 +27,26 @@ CREATE TABLE users (
     referrer_code VARCHAR(50),         -- Код того, КТО пригласил этого юзера (из Cookie при регистрации)
     referrer_id INTEGER REFERENCES users(id), -- ID пригласившего (заполним сами, если найдем такого юзера у нас)
     
+    -- Финансы
+    balance NUMERIC(10, 2) DEFAULT 0,  -- Текущий баланс
+    total_earned NUMERIC(10, 2) DEFAULT 0, -- Всего заработано
+    
+    -- Синхронизация с UDS
+    uds_customer_id INTEGER,           -- ID клиента в UDS (participant.id)
+    uds_inviter_id INTEGER,            -- ID пригласившего в UDS (participant.inviterId)
+    last_sync_at TIMESTAMP WITH TIME ZONE, -- Время последней синхронизации с UDS
+    
+    -- Дополнительные поля
+    telegram_nick VARCHAR(100),        -- Telegram никнейм
+    
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Индекс для быстрого поиска по реферальному коду (чтобы быстро находить "Папу" реферала)
+-- Индексы для быстрого поиска
 CREATE INDEX idx_users_own_code ON users(own_referral_code);
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_uds_customer_id ON users(uds_customer_id);
 
 -- 2. Заказы
 CREATE TABLE orders (
@@ -66,7 +86,33 @@ CREATE TABLE platform_sync (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 5. Логи входящих вебхуков
+-- 5. Транзакции (история начислений и выводов)
+CREATE TABLE transactions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    type VARCHAR(20) NOT NULL,         -- 'earning', 'withdrawal'
+    amount NUMERIC(10, 2) NOT NULL,
+    description TEXT,
+    source_user_id INTEGER REFERENCES users(id), -- Кто привел к начислению
+    level INTEGER,                     -- Уровень в структуре (1, 2, 3)
+    order_id INTEGER REFERENCES orders(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. Логи синхронизации с UDS
+CREATE TABLE uds_sync_log (
+    id SERIAL PRIMARY KEY,
+    sync_type VARCHAR(50) NOT NULL,    -- 'full', 'user_request', 'scheduled'
+    user_id INTEGER REFERENCES users(id), -- NULL для полной синхронизации
+    customers_synced INTEGER DEFAULT 0,
+    errors_count INTEGER DEFAULT 0,
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(20) DEFAULT 'running', -- 'running', 'completed', 'failed'
+    error_message TEXT
+);
+
+-- 7. Логи входящих вебхуков
 CREATE TABLE webhooks_log (
     id SERIAL PRIMARY KEY,
     service VARCHAR(50),

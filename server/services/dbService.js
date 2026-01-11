@@ -1,6 +1,7 @@
 // server/services/dbService.js
 import { addUserToCourse } from './skillspaceService.js';
 import { sendWelcomeEmail } from './emailService.js';
+import { buildUserStructureFromUds } from './udsSyncService.js';
 import dotenv from 'dotenv';
 dotenv.config(); 
 import pool from '../db.js';
@@ -82,9 +83,19 @@ export const registerUser = async (email, phone, name, password, referrerCode) =
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
 
+    // 3. Проверяем, является ли пользователь администратором
+    const adminEmails = process.env.ADMIN_EMAILS ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim()) : [];
+    const adminPhones = process.env.ADMIN_PHONES ? process.env.ADMIN_PHONES.split(',').map(p => p.trim()) : [];
+    
+    let userRole = 'user';
+    if (adminEmails.includes(email) || adminPhones.includes(phone)) {
+        userRole = 'admin';
+        console.log(`🔑 Пользователь ${email} определен как администратор`);
+    }
+
     const updateRes = await pool.query(
-        'UPDATE users SET password_hash = $1, name = $2 WHERE id = $3 RETURNING *',
-        [hash, name, user.id]
+        'UPDATE users SET password_hash = $1, name = $2, role = $3 WHERE id = $4 RETURNING *',
+        [hash, name, userRole, user.id]
     );
     
     return updateRes.rows[0];
@@ -158,17 +169,27 @@ export const processCommissions = async (orderId, userId, amount) => {
 };
 
 // 5. Данные для Дашборда (ЛК)
-export const getUserDashboard = async (userId) => {
-    // Данные профиля
-    const userRes = await pool.query('SELECT name, email, phone, balance, total_earned, own_referral_code, telegram_nick FROM users WHERE id = $1', [userId]);
+export const getUserDashboard = async (userId, targetUserId = null) => {
+    // Если передан targetUserId, используем его (для админов)
+    const actualUserId = targetUserId || userId;
+
+    // Данные профиля (включая role)
+    const userRes = await pool.query(
+        'SELECT name, email, phone, balance, total_earned, own_referral_code, telegram_nick, role FROM users WHERE id = $1', 
+        [actualUserId]
+    );
     const user = userRes.rows[0];
+
+    if (!user) {
+        throw new Error('Пользователь не найден');
+    }
 
     // Статистика (сколько людей пригласил)
     const statsRes = await pool.query(`
         SELECT 
             COUNT(*) FILTER (WHERE referrer_id = $1) as level1
         FROM users 
-    `, [userId]);
+    `, [actualUserId]);
 
     // Список команды (1 линия)
     const teamRes = await pool.query(`
@@ -176,10 +197,17 @@ export const getUserDashboard = async (userId) => {
         FROM users 
         WHERE referrer_id = $1 
         ORDER BY created_at DESC LIMIT 50
-    `, [userId]);
+    `, [actualUserId]);
+
+    // Получаем ID пользователя
+    const userIdRes = await pool.query('SELECT id FROM users WHERE id = $1', [actualUserId]);
+    const userId = userIdRes.rows[0]?.id;
 
     return {
-        profile: user,
+        profile: {
+            ...user,
+            id: userId // Добавляем ID в профиль
+        },
         stats: {
             level1: statsRes.rows[0]?.level1 || 0
         },
@@ -242,4 +270,211 @@ export const updateUserExternalIds = async (userId, skillspaceId, udsId) => {
     if (udsId) {
         await pool.query('UPDATE users SET uds_id = $1 WHERE id = $2', [udsId, userId]);
     }
+};
+
+// --- АДМИНСКИЕ ФУНКЦИИ ---
+
+// 10. Получить структуру пользователя (3 уровня)
+export const getUserStructureTree = async (userId, useUdsData = false) => {
+    if (useUdsData) {
+        // Синхронизируем из UDS и возвращаем структуру
+        return await buildUserStructureFromUds(userId, 3);
+    }
+
+    // Получаем структуру из БД
+    const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+    if (userRes.rows.length === 0) {
+        throw new Error(`Пользователь с ID ${userId} не найден`);
+    }
+
+    const user = userRes.rows[0];
+
+    const structure = {
+        userId,
+        userName: user.name || user.email,
+        udsCustomerId: user.uds_customer_id,
+        lastSyncAt: user.last_sync_at,
+        levels: {
+            1: { count: 0, users: [] },
+            2: { count: 0, users: [] },
+            3: { count: 0, users: [] }
+        },
+        totalUsers: 0
+    };
+
+    // Уровень 1
+    const level1Res = await pool.query(`
+        SELECT u.*,
+               (SELECT COUNT(*) FROM users WHERE referrer_id = u.id) as level1_count
+        FROM users u
+        WHERE u.referrer_id = $1
+        ORDER BY u.created_at DESC
+    `, [userId]);
+
+    structure.levels[1].users = level1Res.rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        phone: row.phone,
+        telegram_nick: row.telegram_nick,
+        balance: row.balance?.toString() || '0',
+        total_earned: row.total_earned?.toString() || '0',
+        own_referral_code: row.own_referral_code,
+        uds_customer_id: row.uds_customer_id,
+        uds_inviter_id: row.uds_inviter_id,
+        created_at: row.created_at,
+        last_sync_at: row.last_sync_at,
+        stats: {
+            level1: parseInt(row.level1_count) || 0,
+            level2: 0,
+            level3: 0
+        }
+    }));
+
+    structure.levels[1].count = structure.levels[1].users.length;
+
+    // Уровень 2
+    if (structure.levels[1].users.length > 0) {
+        const level1Ids = structure.levels[1].users.map(u => u.id);
+        
+        const level2Res = await pool.query(`
+            SELECT u.*,
+                   (SELECT COUNT(*) FROM users WHERE referrer_id = u.id) as level1_count
+            FROM users u
+            WHERE u.referrer_id = ANY($1::integer[])
+            ORDER BY u.created_at DESC
+        `, [level1Ids]);
+
+        // Подсчитываем статистику для уровня 1
+        for (const level1User of structure.levels[1].users) {
+            const level2ForUser = level2Res.rows.filter(r => r.referrer_id === level1User.id);
+            level1User.stats.level2 = level2ForUser.length;
+
+            // Подсчитываем level3 для этого пользователя
+            if (level2ForUser.length > 0) {
+                const level2Ids = level2ForUser.map(u => u.id);
+                const level3Count = await pool.query(`
+                    SELECT COUNT(*) as count
+                    FROM users
+                    WHERE referrer_id = ANY($1::integer[])
+                `, [level2Ids]);
+                level1User.stats.level3 = parseInt(level3Count.rows[0].count) || 0;
+            }
+        }
+
+        structure.levels[2].users = level2Res.rows.map(row => ({
+            id: row.id,
+            name: row.name,
+            email: row.email,
+            phone: row.phone,
+            telegram_nick: row.telegram_nick,
+            balance: row.balance?.toString() || '0',
+            total_earned: row.total_earned?.toString() || '0',
+            own_referral_code: row.own_referral_code,
+            uds_customer_id: row.uds_customer_id,
+            uds_inviter_id: row.uds_inviter_id,
+            created_at: row.created_at,
+            last_sync_at: row.last_sync_at,
+            stats: {
+                level1: parseInt(row.level1_count) || 0,
+                level2: 0,
+                level3: 0
+            }
+        }));
+
+        structure.levels[2].count = structure.levels[2].users.length;
+
+        // Уровень 3
+        if (structure.levels[2].users.length > 0) {
+            const level2Ids = structure.levels[2].users.map(u => u.id);
+            
+            const level3Res = await pool.query(`
+                SELECT u.*,
+                       (SELECT COUNT(*) FROM users WHERE referrer_id = u.id) as level1_count
+                FROM users u
+                WHERE u.referrer_id = ANY($1::integer[])
+                ORDER BY u.created_at DESC
+            `, [level2Ids]);
+
+            // Подсчитываем статистику для уровня 2
+            for (const level2User of structure.levels[2].users) {
+                const level3ForUser = level3Res.rows.filter(r => r.referrer_id === level2User.id);
+                level2User.stats.level2 = level3ForUser.length;
+                level2User.stats.level3 = 0; // Уровень 3 не имеет рефералов
+            }
+
+            structure.levels[3].users = level3Res.rows.map(row => ({
+                id: row.id,
+                name: row.name,
+                email: row.email,
+                phone: row.phone,
+                telegram_nick: row.telegram_nick,
+                balance: row.balance?.toString() || '0',
+                total_earned: row.total_earned?.toString() || '0',
+                own_referral_code: row.own_referral_code,
+                uds_customer_id: row.uds_customer_id,
+                uds_inviter_id: row.uds_inviter_id,
+                created_at: row.created_at,
+                last_sync_at: row.last_sync_at,
+                stats: {
+                    level1: parseInt(row.level1_count) || 0,
+                    level2: 0,
+                    level3: 0
+                }
+            }));
+
+            structure.levels[3].count = structure.levels[3].users.length;
+        }
+    }
+
+    structure.totalUsers = structure.levels[1].count + structure.levels[2].count + structure.levels[3].count;
+
+    return structure;
+};
+
+// 11. Поиск пользователей
+export const searchUsers = async (query, limit = 50) => {
+    const searchTerm = `%${query}%`;
+    
+    const result = await pool.query(`
+        SELECT id, name, email, phone, telegram_nick, own_referral_code, 
+               uds_customer_id, role, created_at
+        FROM users
+        WHERE 
+            email ILIKE $1 OR
+            phone ILIKE $1 OR
+            name ILIKE $1 OR
+            own_referral_code ILIKE $1 OR
+            CAST(uds_customer_id AS TEXT) ILIKE $1
+        ORDER BY created_at DESC
+        LIMIT $2
+    `, [searchTerm, limit]);
+
+    return result.rows;
+};
+
+// 12. Получить список всех пользователей (с пагинацией)
+export const getAllUsersList = async (page = 1, limit = 50) => {
+    const offset = (page - 1) * limit;
+
+    const result = await pool.query(`
+        SELECT id, name, email, phone, telegram_nick, own_referral_code,
+               uds_customer_id, role, balance, total_earned, created_at
+        FROM users
+        ORDER BY created_at DESC
+        LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+
+    const countResult = await pool.query('SELECT COUNT(*) as total FROM users');
+    const total = parseInt(countResult.rows[0].total);
+
+    return {
+        users: result.rows,
+        pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit)
+        }
+    };
 };

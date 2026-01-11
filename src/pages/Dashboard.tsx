@@ -4,12 +4,14 @@ import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AdminPanel } from "@/components/admin/AdminPanel";
 import { 
   Loader2, Copy, LogOut, Users, Wallet, 
-  Trophy, ExternalLink, Send 
+  Trophy, ExternalLink, Send, RefreshCw
 } from "lucide-react";
 
 interface UserProfile {
+  id?: number; // ID пользователя
   name: string;
   email: string;
   phone: string;
@@ -17,6 +19,7 @@ interface UserProfile {
   total_earned: string;
   own_referral_code: string | null;
   telegram_nick: string | null;
+  role?: string; // Добавляем поле role
 }
 
 interface TeamMember {
@@ -39,6 +42,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   // Получение данных
   useEffect(() => {
@@ -87,6 +91,32 @@ const Dashboard = () => {
   const handleGetCode = async () => {
     alert("Запрос кода отправлен! (Функционал в разработке)");
     // Тут будет запрос axios.post('/api/user/generate-code')
+  };
+
+  // Обновление структуры из UDS (для обычных пользователей)
+  const handleSyncStructure = async () => {
+    setSyncing(true);
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await axios.post(
+        "/api/user/sync-structure",
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      // Обновляем данные дашборда
+      const dashboardResponse = await axios.get("/api/dashboard", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setData(dashboardResponse.data);
+      
+      alert("Структура успешно обновлена из UDS!");
+    } catch (error: any) {
+      console.error("Ошибка синхронизации:", error);
+      alert(error.response?.data?.error || "Ошибка обновления структуры");
+    } finally {
+      setSyncing(false);
+    }
   };
 
   if (loading) {
@@ -213,7 +243,22 @@ const Dashboard = () => {
           <TabsContent value="team" className="mt-6">
             <Card className="border-none shadow-md">
               <CardHeader>
-                <CardTitle>Структура (1-й уровень)</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Структура (1-й уровень)</CardTitle>
+                  <Button
+                    onClick={handleSyncStructure}
+                    disabled={syncing}
+                    size="sm"
+                    variant="outline"
+                  >
+                    {syncing ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                    )}
+                    Обновить из UDS
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {data.team.length > 0 ? (
@@ -277,6 +322,15 @@ const Dashboard = () => {
         </Tabs>
 
       </div>
+
+      {/* Админская панель (только для администраторов) */}
+      {data?.profile.role === 'admin' && data?.profile.id && (
+        <AdminPanel 
+          currentUserId={data.profile.id}
+          currentUserData={data}
+        />
+      )}
+
     </div>
   );
 };
