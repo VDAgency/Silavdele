@@ -51,10 +51,17 @@ app.post('/api/auth/register', async (req, res) => {
 
         const user = await registerUser(email, cleanedPhone, name, password, referrer_code);
         
+        if (!user || !user.id) {
+            return res.status(500).json({ error: 'Ошибка создания пользователя' });
+        }
+        
         // Создаем токен (действует 30 дней)
         const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '30d' });
         
-        res.json({ token, user: { name: user.name, email: user.email, role: user.role } });
+        // Безопасное получение role (по умолчанию 'user')
+        const userRole = user.role || 'user';
+        
+        res.json({ token, user: { name: user.name, email: user.email, role: userRole } });
     } catch (e) {
         console.error('Ошибка регистрации:', e);
         res.status(500).json({ error: 'Ошибка регистрации' });
@@ -70,8 +77,15 @@ app.post('/api/auth/login', async (req, res) => {
         if (!user) return res.status(400).json({ error: 'Неверный email или пароль' });
         if (user === 'no_password') return res.status(400).json({ error: 'Аккаунт существует, но пароль не задан. Восстановите доступ.' });
 
+        if (!user.id) {
+            return res.status(500).json({ error: 'Ошибка получения данных пользователя' });
+        }
+
+        // Безопасное получение role (по умолчанию 'user')
+        const userRole = user.role || 'user';
+
         const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '30d' });
-        res.json({ token, user: { name: user.name, email: user.email, role: user.role } });
+        res.json({ token, user: { name: user.name, email: user.email, role: userRole } });
     } catch (e) {
         console.error('Ошибка входа:', e);
         res.status(500).json({ error: 'Ошибка входа' });

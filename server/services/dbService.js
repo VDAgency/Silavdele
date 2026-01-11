@@ -87,16 +87,39 @@ export const registerUser = async (email, phone, name, password, referrerCode) =
     const adminEmails = process.env.ADMIN_EMAILS ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim()) : [];
     const adminPhones = process.env.ADMIN_PHONES ? process.env.ADMIN_PHONES.split(',').map(p => p.trim()) : [];
     
-    let userRole = 'user';
-    if (adminEmails.includes(email) || adminPhones.includes(phone)) {
-        userRole = 'admin';
-        console.log(`🔑 Пользователь ${email} определен как администратор`);
+    // Определяем роль: если пользователь уже админ, сохраняем его роль
+    let userRole = user.role || 'user';
+    
+    // Если пользователь еще не админ, проверяем список админов
+    if (userRole !== 'admin') {
+        // Нормализуем телефон для сравнения (пробуем разные форматы)
+        let normalizedPhone1 = phone;
+        let normalizedPhone2 = phone;
+        if (phone.startsWith('8')) {
+            normalizedPhone1 = '+7' + phone.slice(1);
+        }
+        if (phone.startsWith('7') && !phone.startsWith('+7')) {
+            normalizedPhone2 = '+' + phone;
+        }
+        
+        // Проверяем по email и всем вариантам телефона
+        if (adminEmails.includes(email) || 
+            adminPhones.includes(phone) || 
+            adminPhones.includes(normalizedPhone1) || 
+            adminPhones.includes(normalizedPhone2)) {
+            userRole = 'admin';
+            console.log(`🔑 Пользователь ${email} определен как администратор`);
+        }
     }
 
     const updateRes = await pool.query(
         'UPDATE users SET password_hash = $1, name = $2, role = $3 WHERE id = $4 RETURNING *',
         [hash, name, userRole, user.id]
     );
+    
+    if (!updateRes.rows[0]) {
+        throw new Error('Не удалось обновить пользователя');
+    }
     
     return updateRes.rows[0];
 };
@@ -113,6 +136,13 @@ export const loginUser = async (email, password) => {
 
     const validPass = await bcrypt.compare(password, user.password_hash);
     if (!validPass) return null;
+
+    // Убеждаемся, что у пользователя есть роль (по умолчанию 'user')
+    if (!user.role) {
+        // Если роль не установлена, устанавливаем 'user' по умолчанию
+        await pool.query('UPDATE users SET role = $1 WHERE id = $2', ['user', user.id]);
+        user.role = 'user';
+    }
 
     return user;
 };
