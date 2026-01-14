@@ -1,3 +1,4 @@
+-- server/sql/schema.sql
 -- Очистка старых таблиц (порядок важен из-за связей)
 DROP TABLE IF EXISTS uds_sync_log;
 DROP TABLE IF EXISTS transactions;
@@ -14,6 +15,10 @@ CREATE TABLE users (
     phone VARCHAR(32) UNIQUE,          -- Телефон, критически важен для UDS
     name VARCHAR(255),
     password_hash VARCHAR(255),        -- Хеш пароля для входа в ЛК
+    
+    -- Восстановление доступа (НОВОЕ)
+    reset_token VARCHAR(255),          -- Токен для сброса пароля
+    reset_token_expires TIMESTAMP WITH TIME ZONE, -- Время жизни токена
     
     -- Роли и права
     role VARCHAR(20) DEFAULT 'user',   -- 'user' или 'admin'
@@ -47,6 +52,8 @@ CREATE TABLE users (
 CREATE INDEX idx_users_own_code ON users(own_referral_code);
 CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_users_uds_customer_id ON users(uds_customer_id);
+-- Индекс для поиска по токену сброса (ускоряет проверку при восстановлении)
+CREATE INDEX idx_users_reset_token ON users(reset_token);
 
 -- 2. Заказы
 CREATE TABLE orders (

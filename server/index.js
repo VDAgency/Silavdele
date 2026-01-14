@@ -21,10 +21,15 @@ import {
     getUserDashboard,
     getUserStructureTree,
     searchUsers,
-    getAllUsersList
+    getAllUsersList,
+    setResetToken,
+    resetPasswordWithToken
 } from './services/dbService.js';
 import { addUserToCourse } from './services/skillspaceService.js';
-import { sendWelcomeEmail } from './services/emailService.js';
+import { 
+    sendWelcomeEmail,
+    sendResetPasswordEmail
+} from './services/emailService.js';
 import { sendUdsPurchase } from './services/udsService.js';
 import { syncAllCustomersFromUds, syncUserStructureFromUds } from './services/udsSyncService.js';
 import { verifyToken, requireAdmin } from './middleware/authMiddleware.js';
@@ -472,6 +477,57 @@ app.post('/api/user/sync-structure', verifyToken, async (req, res) => {
     } catch (e) {
         console.error('Ошибка синхронизации структуры:', e);
         res.status(500).json({ error: 'Ошибка синхронизации структуры' });
+    }
+});
+
+// ==========================================
+// 6. ВОССТАНОВЛЕНИЕ ПАРОЛЯ
+// ==========================================
+
+// Запрос на сброс (Шаг 1: Email -> Ссылка)
+app.post('/api/auth/forgot-password', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email обязателен' });
+
+        // 1. Генерируем токен и сохраняем в базу
+        const token = await setResetToken(email);
+
+        // Если токен не создался (например, юзера нет), мы все равно отвечаем "ОК"
+        // Это защита от перебора email-ов злоумышленниками.
+        if (token) {
+            // 2. Отправляем письмо
+            await sendResetPasswordEmail(email, token);
+        }
+
+        res.json({ message: 'Если такой Email существует, мы отправили на него инструкцию.' });
+
+    } catch (e) {
+        console.error('Ошибка forgot-password:', e);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// Установка нового пароля (Шаг 2: Токен + Новый пароль -> Успех)
+app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+        const { token, newPassword } = req.body;
+        if (!token || !newPassword) {
+            return res.status(400).json({ error: 'Неверные данные' });
+        }
+
+        // 1. Пробуем сбросить
+        const success = await resetPasswordWithToken(token, newPassword);
+
+        if (success) {
+            res.json({ message: 'Пароль успешно изменен. Теперь вы можете войти.' });
+        } else {
+            res.status(400).json({ error: 'Ссылка устарела или неверна.' });
+        }
+
+    } catch (e) {
+        console.error('Ошибка reset-password:', e);
+        res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
 

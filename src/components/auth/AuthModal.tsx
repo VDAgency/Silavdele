@@ -3,24 +3,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom"; // Добавили для перехода
+import { useNavigate } from "react-router-dom";
 
-// Тип для режима окна: вход или регистрация
-type AuthMode = "login" | "register";
+// Добавили режим "forgot-password"
+type AuthMode = "login" | "register" | "forgot-password";
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialMode?: AuthMode; // С чего начинать (вход или регистрация)
+  initialMode?: AuthMode;
 }
 
 export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalProps) => {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const navigate = useNavigate(); // Хук для навигации
+  const navigate = useNavigate();
 
   // Данные формы
   const [formData, setFormData] = useState({
@@ -30,7 +30,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalP
     password: "",
   });
 
-  // Сбрасываем режим и данные при открытии окна
+  // Сбрасываем режим при открытии
   useEffect(() => {
     if (isOpen) {
       setMode(initialMode);
@@ -39,18 +39,25 @@ export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalP
     }
   }, [isOpen, initialMode]);
 
-  // Обработчик ввода
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Обработчик отправки (ГЛАВНАЯ ЛОГИКА)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // 1. Определяем адрес и данные
+      // --- ЛОГИКА ВОССТАНОВЛЕНИЯ ПАРОЛЯ ---
+      if (mode === "forgot-password") {
+        await axios.post("/api/auth/forgot-password", { email: formData.email });
+        alert("Ссылка для сброса пароля отправлена на ваш Email! Проверьте почту.");
+        setMode("login"); // Возвращаем на вход
+        setLoading(false);
+        return;
+      }
+
+      // --- ЛОГИКА ВХОДА И РЕГИСТРАЦИИ ---
       const url = mode === "login" ? "/api/auth/login" : "/api/auth/register";
       
       let payload: any = {
@@ -58,9 +65,8 @@ export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalP
         password: formData.password
       };
 
-      // Если регистрация - добавляем имя, телефон и реферальный код
       if (mode === "register") {
-        const referrerCode = localStorage.getItem("uds_ref_code"); // Достаем код из памяти
+        const referrerCode = localStorage.getItem("uds_ref_code");
         payload = {
           ...payload,
           name: formData.name,
@@ -69,27 +75,18 @@ export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalP
         };
       }
 
-      // 2. Отправляем запрос на сервер
       const response = await axios.post(url, payload);
-
-      // 3. Если успех
       const { token, user } = response.data;
 
-      // Сохраняем токен в браузере
       localStorage.setItem("auth_token", token);
       localStorage.setItem("user_data", JSON.stringify(user));
 
       console.log("Успешная авторизация:", user.name);
-
-      // Закрываем окно
       onClose();
-
-      // Переходим в личный кабинет
       navigate("/dashboard");
 
     } catch (error: any) {
-      console.error("Ошибка авторизации:", error);
-      // Выводим сообщение от сервера или общее
+      console.error("Ошибка:", error);
       const message = error.response?.data?.error || "Произошла ошибка. Проверьте данные.";
       alert(message);
     } finally {
@@ -97,9 +94,11 @@ export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalP
     }
   };
 
-  // Переключатель режимов
-  const toggleMode = () => {
-    setMode(mode === "login" ? "register" : "login");
+  // Заголовок модалки
+  const getTitle = () => {
+    if (mode === "login") return "Вход в кабинет";
+    if (mode === "register") return "Регистрация";
+    return "Восстановление пароля";
   };
 
   return (
@@ -107,7 +106,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalP
       <DialogContent className="sm:max-w-[425px] p-8 rounded-2xl bg-white">
         <DialogHeader className="mb-4">
           <DialogTitle className="text-2xl font-bold text-center">
-            {mode === "login" ? "Вход в кабинет" : "Регистрация"}
+            {getTitle()}
           </DialogTitle>
         </DialogHeader>
 
@@ -144,7 +143,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalP
             </>
           )}
 
-          {/* Общие поля */}
+          {/* Email нужен во всех режимах */}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
@@ -159,28 +158,43 @@ export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalP
             />
           </div>
 
-          <div className="space-y-2 relative">
-            <Label htmlFor="password">Пароль</Label>
-            <div className="relative">
-              <Input
-                id="password"
-                name="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="••••••••"
-                required
-                value={formData.password}
-                onChange={handleChange}
-                className="rounded-xl bg-gray-50 border-gray-200 pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
+          {/* Пароль нужен только для Входа и Регистрации (не для сброса) */}
+          {mode !== "forgot-password" && (
+            <div className="space-y-2 relative">
+              <div className="flex justify-between items-center">
+                <Label htmlFor="password">Пароль</Label>
+                {/* Ссылка "Забыли пароль" только при входе */}
+                {mode === "login" && (
+                  <button 
+                    type="button" 
+                    onClick={() => setMode("forgot-password")}
+                    className="text-xs text-primary hover:underline font-medium"
+                  >
+                    Забыли пароль?
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  required
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="rounded-xl bg-gray-50 border-gray-200 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           <Button 
             type="submit" 
@@ -188,7 +202,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalP
             className="w-full py-6 text-base font-semibold rounded-xl mt-6 bg-primary hover:bg-primary-hover"
           >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {mode === "login" ? "Войти" : "Создать аккаунт"}
+            {mode === "login" ? "Войти" : mode === "register" ? "Создать аккаунт" : "Сбросить пароль"}
           </Button>
         </form>
 
@@ -197,17 +211,25 @@ export const AuthModal = ({ isOpen, onClose, initialMode = "login" }: AuthModalP
           {mode === "login" ? (
             <>
               Нет аккаунта?{" "}
-              <button onClick={toggleMode} className="text-primary font-semibold hover:underline">
+              <button onClick={() => setMode("register")} className="text-primary font-semibold hover:underline">
                 Зарегистрироваться
               </button>
             </>
-          ) : (
+          ) : mode === "register" ? (
             <>
               Уже есть аккаунт?{" "}
-              <button onClick={toggleMode} className="text-primary font-semibold hover:underline">
+              <button onClick={() => setMode("login")} className="text-primary font-semibold hover:underline">
                 Войти
               </button>
             </>
+          ) : (
+            // Кнопка "Назад" для режима восстановления
+            <button 
+              onClick={() => setMode("login")} 
+              className="flex items-center justify-center gap-1 mx-auto text-gray-600 hover:text-gray-900"
+            >
+              <ArrowLeft size={14} /> Вернуться ко входу
+            </button>
           )}
         </div>
       </DialogContent>

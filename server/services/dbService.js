@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 dotenv.config(); 
 import pool from '../db.js';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 // --- ПОЛЬЗОВАТЕЛИ (AUTH & REGISTRATION) ---
 
@@ -506,4 +507,52 @@ export const getAllUsersList = async (page = 1, limit = 50) => {
             totalPages: Math.ceil(total / limit)
         }
     };
+};
+
+
+// --- ВОССТАНОВЛЕНИЕ ПАРОЛЯ ---
+
+// 13. Генерация и сохранение токена сброса
+export const setResetToken = async (email) => {
+    // 1. Ищем пользователя
+    const userRes = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (userRes.rows.length === 0) return null; // Юзер не найден
+
+    // 2. Генерируем случайный токен (32 байта в hex = 64 символа)
+    const token = crypto.randomBytes(32).toString('hex');
+    
+    // 3. Устанавливаем срок жизни (1 час с текущего момента)
+    const expires = new Date(Date.now() + 3600000); // 3600000 мс = 1 час
+
+    // 4. Сохраняем в базу
+    await pool.query(
+        'UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE email = $3',
+        [token, expires, email]
+    );
+
+    return token;
+};
+
+// 14. Сброс пароля по токену
+export const resetPasswordWithToken = async (token, newPassword) => {
+    // 1. Ищем юзера, у которого совпадает токен И время еще не истекло (NOW() < expires)
+    const res = await pool.query(
+        'SELECT id FROM users WHERE reset_token = $1 AND reset_token_expires > NOW()',
+        [token]
+    );
+
+    if (res.rows.length === 0) return null; // Токен неверный или просрочен
+    const userId = res.rows[0].id;
+
+    // 2. Хешируем новый пароль
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(newPassword, salt);
+
+    // 3. Обновляем пароль и очищаем токен (чтобы нельзя было использовать повторно)
+    await pool.query(
+        'UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2',
+        [hash, userId]
+    );
+
+    return true;
 };
