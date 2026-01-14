@@ -229,14 +229,13 @@ export const getUserDashboard = async (userId, targetUserId = null) => {
         ORDER BY created_at DESC LIMIT 50
     `, [actualUserId]);
 
-    // Получаем ID пользователя
-    const userIdRes = await pool.query('SELECT id FROM users WHERE id = $1', [actualUserId]);
-    const userId = userIdRes.rows[0]?.id;
-
+    // Получаем ID пользователя (он у нас и так есть в actualUserId, но для надежности вернем из базы)
+    // Лишний запрос убрал, берем из переменной
+    
     return {
         profile: {
             ...user,
-            id: userId // Добавляем ID в профиль
+            id: actualUserId // Исправили ошибку дублирования и лишнего запроса
         },
         stats: {
             level1: statsRes.rows[0]?.level1 || 0
